@@ -62,8 +62,22 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/examples":
             # The catalogue, minus nothing -- the page renders questions client-side.
             self._send(200, json.dumps(EXAMPLES), "application/json")
+        elif self._serve_static(path):
+            pass
         else:
             self._send(404, "not found", "text/plain")
+
+    _CTYPES = {".ttf": "font/ttf", ".woff2": "font/woff2", ".css": "text/css",
+               ".js": "text/javascript", ".png": "image/png", ".svg": "image/svg+xml"}
+
+    def _serve_static(self, path):
+        """Serve a file under static/, e.g. /fonts/*.ttf. Rejects path traversal."""
+        target = (STATIC / path.lstrip("/")).resolve()
+        if not str(target).startswith(str(STATIC.resolve()) + "/") or not target.is_file():
+            return False
+        ctype = self._CTYPES.get(target.suffix, "application/octet-stream")
+        self._send(200, target.read_bytes(), ctype)
+        return True
 
     def do_POST(self):
         if self.path.split("?")[0] != "/api/run":

@@ -5,22 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>laya-snake / local intelligence</title>
 <style>
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-400.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap}
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-500.ttf") format("truetype");font-weight:500;font-style:normal;font-display:swap}
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-600.ttf") format("truetype");font-weight:600;font-style:normal;font-display:swap}
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-700.ttf") format("truetype");font-weight:700;font-style:normal;font-display:swap}
+  @font-face{font-family:"Play";src:url("fonts/play-700.ttf") format("truetype");font-weight:700;font-style:normal;font-display:swap}
   :root {
-    --bg: #090f13;
-    --fg: #e3f3ef;
-    --muted: #68868c;
-    --dim: #20353c;
-    --green: #62f5b5;
-    --amber: #ffce73;
-    --red: #ff7c8c;
-    --cyan: #8ad8e9;
+    --bg: #0b1118;
+    --fg: #f4fbff;
+    --muted: rgba(192,252,255,.56);
+    --dim: rgba(192,252,255,.12);
+    --green: #b8ff00;
+    --amber: #00f0ff;
+    --red: #ff6b6b;
+    --cyan: #00f0ff;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--fg);
-    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 14px/1.5 "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
     letter-spacing: .06em;
     padding: 24px;
   }
@@ -29,20 +34,26 @@
     display: flex; justify-content: space-between; align-items: baseline;
     color: var(--muted); border-bottom: 1px solid var(--dim); padding-bottom: 10px;
   }
+  .term-chrome { display: flex; align-items: center; gap: 8px; }
+  .term-chrome i { width: 11px; height: 11px; border-radius: 50%; background: #2c3a4b; display: block; }
+  .term-chrome i:nth-child(1) { background: #ff5f57; }
+  .term-chrome i:nth-child(2) { background: #febc2e; }
+  .term-chrome i:nth-child(3) { background: #28c840; }
+  .term-chrome span { margin-left: 6px; letter-spacing: .04em; }
   #status.live { color: var(--green); }
   #status.over { color: var(--red); }
   #status.clear { color: var(--cyan); }
   main { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 40px; margin-top: 26px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  h1 { font-size: 20px; letter-spacing: .5em; font-weight: 500; margin: 0 0 18px; }
-  canvas { width: 100%; height: auto; border: 1px solid var(--dim); border-radius: 3px; image-rendering: pixelated; }
+  h1 { font-family: "Play", sans-serif; font-size: 20px; letter-spacing: .5em; font-weight: 700; margin: 0 0 18px; }
+  canvas { width: 100%; height: auto; border: 1px solid var(--dim); border-radius: 12px; image-rendering: pixelated; }
   .scores { display: flex; gap: 42px; margin-top: 22px; }
   .score-label { color: var(--muted); font-size: 11px; }
-  .score-value { font-size: 40px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .score-value { font-family: "Play", sans-serif; font-weight: 700; font-size: 40px; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .fill { color: var(--muted); font-size: 11px; margin-top: 14px; }
   .track { height: 3px; background: var(--dim); margin-top: 6px; border-radius: 2px; overflow: hidden; }
   .track > i { display: block; height: 100%; background: var(--green); width: 0; transition: width .2s; }
-  .panel h2 { font-size: 14px; font-weight: 500; color: var(--green); margin: 0; letter-spacing: .1em; }
+  .panel h2 { font-size: 14px; font-weight: 600; color: var(--green); margin: 0; letter-spacing: .1em; }
   .sub { color: var(--muted); font-size: 11px; margin-bottom: 22px; }
   .cap { color: var(--muted); font-size: 11px; margin: 20px 0 8px; }
   .prob { display: grid; grid-template-columns: 62px 1fr 42px; align-items: center; gap: 8px; margin: 5px 0; }
@@ -54,7 +65,7 @@
   .rows { margin-top: 20px; }
   .row { display: flex; justify-content: space-between; margin: 3px 0; }
   .row span:first-child { color: var(--muted); }
-  .tag { color: var(--amber); }
+  .tag { color: var(--red); }
   .offline { color: var(--green); }
   footer { margin-top: 30px; border-top: 1px solid var(--dim); padding-top: 10px; color: var(--muted); font-size: 11px;
            display: flex; justify-content: space-between; }
@@ -63,7 +74,7 @@
 <body>
 <div class="wrap">
   <header>
-    <span>LAYA&nbsp; /&nbsp; LOCAL INTELLIGENCE</span>
+    <span class="term-chrome"><i></i><i></i><i></i><span>LAYA&nbsp; /&nbsp; LOCAL INTELLIGENCE</span></span>
     <span id="status" class="live">CONNECTING</span>
   </header>
 
@@ -161,7 +172,7 @@ function drawBoard(g) {
   });
 
   if (g.food) {
-    ctx.fillStyle = "#ffce73";
+    ctx.fillStyle = "#00f0ff";
     ctx.beginPath();
     ctx.arc(g.food[0] * CELL + CELL / 2, g.food[1] * CELL + CELL / 2, CELL / 2 - 3, 0, 7);
     ctx.fill();

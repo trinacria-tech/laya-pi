@@ -5,31 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Laya · vetrina API decisionale</title>
 <style>
-  :root{--bg:#090f13;--fg:#e3f3ef;--muted:#68868c;--dim:#20353c;--green:#62f5b5;--amber:#ffce73;--red:#ff7c8c;--cyan:#8ad8e9;--card:#0d171c}
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-400.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap}
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-500.ttf") format("truetype");font-weight:500;font-style:normal;font-display:swap}
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-600.ttf") format("truetype");font-weight:600;font-style:normal;font-display:swap}
+  @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-700.ttf") format("truetype");font-weight:700;font-style:normal;font-display:swap}
+  @font-face{font-family:"Play";src:url("fonts/play-700.ttf") format("truetype");font-weight:700;font-style:normal;font-display:swap}
+  :root{
+    --bg:#0b1118;--fg:#f4fbff;--muted:rgba(192,252,255,.56);--dim:rgba(192,252,255,.12);
+    --green:#b8ff00;--amber:#00f0ff;--red:#ff6b6b;--cyan:#00f0ff;--soft-blue:#c0fcff;
+    --card:linear-gradient(180deg, rgba(20,29,39,.94), rgba(17,25,34,.9))
+  }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.03em;padding:28px}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 "JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.03em;padding:28px}
   .wrap{max-width:1040px;margin:0 auto}
   header{border-bottom:1px solid var(--dim);padding-bottom:14px;margin-bottom:8px}
-  h1{font-size:20px;font-weight:500;letter-spacing:.15em;margin:0}
+  .term-chrome{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+  .term-chrome i{width:11px;height:11px;border-radius:50%;background:#2c3a4b;display:block}
+  .term-chrome i:nth-child(1){background:#ff5f57}
+  .term-chrome i:nth-child(2){background:#febc2e}
+  .term-chrome i:nth-child(3){background:#28c840}
+  .term-chrome span{margin-left:6px;color:var(--muted);font-size:11px;letter-spacing:.04em}
+  h1{font-family:"Play",sans-serif;font-size:20px;font-weight:700;letter-spacing:.15em;margin:0}
   .sub{color:var(--muted);font-size:12px;margin-top:6px}
   .sub b{color:var(--cyan);font-weight:500}
-  .card{background:var(--card);border:1px solid var(--dim);border-radius:6px;padding:18px 20px;margin-top:20px}
+  .card{background:var(--card);border:1px solid var(--dim);border-radius:20px;box-shadow:0 10px 24px rgba(5,10,18,.18);padding:18px 20px;margin-top:20px}
   .card.build{border-color:var(--cyan)}
-  .card h2{font-size:15px;font-weight:500;color:var(--green);margin:0 0 3px}
+  .card h2{font-size:15px;font-weight:600;color:var(--green);margin:0 0 3px}
   .card.build h2{color:var(--cyan)}
   .blurb{color:var(--muted);font-size:12px;margin-bottom:12px}
-  textarea{width:100%;background:#0a1216;color:var(--fg);border:1px solid var(--dim);border-radius:4px;
+  textarea{width:100%;background:#0a0e14;color:var(--fg);border:1px solid #ffffff1c;border-radius:4px;
     font:inherit;padding:9px 11px;resize:none;overflow:hidden;min-height:44px}
-  input[type=text]{background:#0a1216;color:var(--fg);border:1px solid var(--dim);border-radius:4px;font:inherit;padding:6px 9px}
-  select{background:#0a1216;color:var(--fg);border:1px solid var(--dim);border-radius:4px;font:inherit;padding:6px 9px}
+  textarea:focus,input[type=text]:focus,select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,240,255,.1)}
+  input[type=text]{background:#0a0e14;color:var(--fg);border:1px solid #ffffff1c;border-radius:4px;font:inherit;padding:6px 9px}
+  select{background:#0a0e14;color:var(--fg);border:1px solid #ffffff1c;border-radius:4px;font:inherit;padding:6px 9px}
   .qtags{margin:10px 0;display:flex;flex-wrap:wrap;gap:6px}
-  .qtag{font-size:11px;color:var(--muted);border:1px solid var(--dim);border-radius:3px;padding:2px 7px}
+  .qtag{font-size:11px;color:var(--muted);border:1px solid var(--dim);border-radius:999px;padding:2px 9px}
   .qtag b{color:var(--fg);font-weight:500}
-  .run{background:var(--green);color:#052018;border:none;border-radius:4px;padding:7px 16px;font:inherit;
-    font-weight:600;cursor:pointer;letter-spacing:.05em}
+  .run{background:var(--green);color:#161f2a;border:none;border-radius:999px;padding:7px 16px;font:inherit;
+    font-weight:600;cursor:pointer;letter-spacing:.05em;transition:background-color 160ms ease,transform 160ms ease}
+  .run:hover:not(:disabled){background:#d4ff58;transform:translateY(-1px)}
   .run:disabled{opacity:.5;cursor:default}
-  .ghost{background:transparent;color:var(--cyan);border:1px solid var(--dim);border-radius:4px;padding:6px 12px;
-    font:inherit;cursor:pointer}
+  .ghost{background:transparent;color:var(--cyan);border:1px solid var(--dim);border-radius:999px;padding:6px 12px;
+    font:inherit;cursor:pointer;transition:color 160ms ease,border-color 160ms ease}
+  .ghost:hover{border-color:rgba(0,240,255,.55);color:var(--cyan)}
   .meta{color:var(--muted);font-size:11px;margin-left:12px}
   .answers{margin-top:14px;display:grid;gap:12px}
   .ans{border-top:1px solid var(--dim);padding-top:10px}
@@ -44,7 +62,7 @@
   .gauge>i{display:block;height:100%;width:0}
   .val{text-align:right;font-variant-numeric:tabular-nums}
   .err{color:var(--red);font-size:12px;margin-top:10px}
-  .qbuild{border:1px solid var(--dim);border-radius:5px;padding:12px;margin:10px 0}
+  .qbuild{border:1px solid var(--dim);border-radius:12px;padding:12px;margin:10px 0}
   .qbuild .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
   .qbuild label{color:var(--muted);font-size:11px}
   .qbuild .rm{background:transparent;border:none;color:var(--red);cursor:pointer;font:inherit;margin-left:auto}
@@ -55,6 +73,7 @@
 <body>
 <div class="wrap">
   <header>
+    <div class="term-chrome"><i></i><i></i><i></i><span>laya — ~/showcase</span></div>
     <h1>LAYA · API DECISIONALE</h1>
     <div class="sub">Decisioni tipizzate System-1 in un solo passaggio · <b id="engine">connessione…</b> · zero token in uscita</div>
   </header>
