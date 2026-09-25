@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>laya-snake / local intelligence</title>
+<title>laya-snake / intelligenza locale</title>
 <style>
   @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-400.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap}
   @font-face{font-family:"JetBrains Mono";src:url("fonts/jetbrains-mono-500.ttf") format("truetype");font-weight:500;font-style:normal;font-display:swap}
@@ -56,7 +56,7 @@
   .panel h2 { font-size: 14px; font-weight: 600; color: var(--green); margin: 0; letter-spacing: .1em; }
   .sub { color: var(--muted); font-size: 11px; margin-bottom: 22px; }
   .cap { color: var(--muted); font-size: 11px; margin: 20px 0 8px; }
-  .prob { display: grid; grid-template-columns: 62px 1fr 42px; align-items: center; gap: 8px; margin: 5px 0; }
+  .prob { display: grid; grid-template-columns: 84px 1fr 42px; align-items: center; gap: 8px; margin: 5px 0; }
   .prob .bar { height: 11px; background: var(--dim); border-radius: 1px; overflow: hidden; }
   .prob .bar > i { display: block; height: 100%; background: var(--muted); width: 0; transition: width .15s; }
   .prob.sel { color: var(--green); }
@@ -67,6 +67,16 @@
   .row span:first-child { color: var(--muted); }
   .tag { color: var(--red); }
   .offline { color: var(--green); }
+  .shieldrows { position: relative; }
+  .help { font: inherit; font-size: 10px; line-height: 14px; width: 16px; height: 16px; padding: 0; margin-left: 8px;
+          border: 1px solid var(--muted); border-radius: 50%; background: transparent; color: var(--muted);
+          cursor: help; vertical-align: 1px; }
+  .help:hover, .help:focus-visible, .help[aria-expanded="true"] { color: var(--green); border-color: var(--green); outline: none; }
+  .tip { display: none; position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 10;
+         background: #111b25; border: 1px solid var(--dim); border-radius: 8px; padding: 4px 12px;
+         font-size: 11px; line-height: 1.55; letter-spacing: .02em; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .tip p { margin: 8px 0; }
+  .shieldrows:has(.help:hover, .help:focus-visible) .tip, .tip.open { display: block; }
   footer { margin-top: 30px; border-top: 1px solid var(--dim); padding-top: 10px; color: var(--muted); font-size: 11px;
            display: flex; justify-content: space-between; }
 </style>
@@ -74,8 +84,8 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="term-chrome"><i></i><i></i><i></i><span>LAYA&nbsp; /&nbsp; LOCAL INTELLIGENCE</span></span>
-    <span id="status" class="live">CONNECTING</span>
+    <span class="term-chrome"><i></i><i></i><i></i><span>LAYA&nbsp; /&nbsp; INTELLIGENZA LOCALE</span></span>
+    <span id="status" class="live">CONNESSIONE</span>
   </header>
 
   <main>
@@ -83,57 +93,71 @@
       <h1>S N A K E</h1>
       <canvas id="board" width="480" height="320"></canvas>
       <div class="scores">
-        <div><div class="score-label">SCORE</div><div class="score-value" id="score" style="color:var(--green)">000</div></div>
-        <div><div class="score-label">LENGTH</div><div class="score-value" id="length">000</div></div>
-        <div><div class="score-label">BEST</div><div class="score-value" id="best" style="color:var(--muted)">000</div></div>
+        <div><div class="score-label">PUNTEGGIO</div><div class="score-value" id="score" style="color:var(--green)">000</div></div>
+        <div><div class="score-label">LUNGHEZZA</div><div class="score-value" id="length">000</div></div>
+        <div><div class="score-label">RECORD</div><div class="score-value" id="best" style="color:var(--muted)">000</div></div>
       </div>
       <div class="track"><i id="fill"></i></div>
-      <div class="fill"><span id="fillpct">0.0%</span> of board</div>
+      <div class="fill"><span id="fillpct">0.0%</span> del tabellone</div>
     </section>
 
     <section class="panel">
-      <h2>Laya multilingual</h2>
-      <div class="sub" id="hw">loading…</div>
+      <h2>Laya multilingue</h2>
+      <div class="sub" id="hw">caricamento…</div>
 
-      <div class="cap">NEXT MOVE &nbsp;·&nbsp; MODEL PROBABILITIES</div>
+      <div class="cap">PROSSIMA MOSSA &nbsp;·&nbsp; PROBABILITÀ DEL MODELLO</div>
       <div id="probs"></div>
 
       <div class="rows">
-        <div class="row"><span>EXECUTING</span><span id="exec" style="color:var(--green)">—</span></div>
+        <div class="row"><span>IN ESECUZIONE</span><span id="exec" style="color:var(--green)">—</span></div>
       </div>
 
-      <div class="cap">DEAD-END RISK</div>
+      <div class="cap">RISCHIO VICOLO CIECO</div>
       <div class="track"><i id="riskbar" style="background:var(--amber)"></i></div>
       <div class="row"><span></span><span id="risk" class="tag">0.00</span></div>
 
-      <div class="cap">FOOD REACHABLE</div>
+      <div class="cap">CIBO RAGGIUNGIBILE</div>
       <div class="track"><i id="foodbar" style="background:var(--cyan)"></i></div>
       <div class="row"><span></span><span id="food" style="color:var(--cyan)">0.00</span></div>
 
       <div class="rows">
-        <div class="row"><span>INFERENCE</span><span id="inf">— ms</span></div>
-        <div class="row"><span>DECISIONS</span><span id="dps">— /s</span></div>
-        <div class="row"><span>OUTPUT TOKENS</span><span id="tok">0</span></div>
-        <div class="row"><span>NETWORK</span><span class="offline">OFFLINE</span></div>
-        <div class="row"><span>ENGINE</span><span id="engine" style="color:var(--muted)">—</span></div>
-        <div class="row"><span>SPECTATORS</span><span id="clients">1</span></div>
+        <div class="row"><span>INFERENZA</span><span id="inf">— ms</span></div>
+        <div class="row"><span>DECISIONI</span><span id="dps">— /s</span></div>
+        <div class="row"><span>TOKEN IN USCITA</span><span id="tok">0</span></div>
+        <div class="row"><span>RETE</span><span class="offline">NON CONNESSA</span></div>
+        <div class="row"><span>MOTORE</span><span id="engine" style="color:var(--muted)">—</span></div>
+        <div class="row"><span>SPETTATORI</span><span id="clients">1</span></div>
       </div>
 
-      <div class="rows">
-        <div class="row"><span id="shieldmode">Laya + cycle safety</span></div>
-        <div class="row"><span>Shield interventions</span><span id="shield" class="tag">0000</span></div>
+      <div class="rows shieldrows">
+        <div class="row"><span id="shieldmode">Laya + scudo</span></div>
+        <div class="row"><span>Interventi dello scudo<button type="button" class="help" id="shieldq" aria-label="Come funziona lo scudo" aria-expanded="false" aria-controls="shieldhelp">?</button></span><span id="shield" class="tag">0000</span></div>
+        <div class="tip" id="shieldhelp" role="note">
+          <p>A ogni mossa Laya assegna una probabilità a ciascuna direzione e propone la più probabile.</p>
+          <p>Un pianificatore deterministico calcola quali mosse sono sicure, seguendo un percorso chiuso che passa una volta per ogni cella del tabellone. Una mossa non è sicura se urta un ostacolo, inverte la direzione, attraversa la coda o salta il cibo sul percorso sicuro.</p>
+          <p>Se la mossa di Laya non è sicura, lo scudo la sostituisce con la mossa sicura che Laya ritiene più probabile: il contatore aumenta di uno e accanto alla mossa compare <span class="tag">SCUDO</span>.</p>
+          <p>Pochi interventi: Laya sceglie da solo mosse sicure. Molti: è il pianificatore a salvare il serpente.</p>
+        </div>
       </div>
     </section>
   </main>
 
   <footer>
-    <span>ESTIMATES BY LAYA · decisions computed on the Pi</span>
+    <span>STIME DI LAYA · decisioni calcolate sul Pi</span>
     <span id="clock">00:00</span>
   </footer>
 </div>
 
 <script>
 const DIRS = ["UP", "DOWN", "LEFT", "RIGHT"];
+// Server/model speak English; only the labels shown here are Italian.
+const DIR_IT = { UP: "SU", DOWN: "GIÙ", LEFT: "SINISTRA", RIGHT: "DESTRA" };
+const STATUS_IT = {
+  "LIVE": "IN DIRETTA",
+  "PAUSED · no player": "IN PAUSA · nessun giocatore",
+  "GAME OVER": "PARTITA FINITA",
+  "BOARD CLEAR": "TABELLONE COMPLETATO",
+};
 const $ = id => document.getElementById(id);
 const canvas = $("board"), ctx = canvas.getContext("2d");
 const CELL = 20;
@@ -144,7 +168,7 @@ for (const d of DIRS) {
   const el = document.createElement("div");
   el.className = "prob";
   el.innerHTML = `<span class="name"></span><div class="bar"><i></i></div><span class="val">0.00</span>`;
-  el.querySelector(".name").textContent = d;
+  el.querySelector(".name").textContent = DIR_IT[d];
   $("probs").appendChild(el);
   rows[d] = el;
 }
@@ -198,8 +222,7 @@ function render(frame) {
     rows[dir].querySelector(".val").textContent = p.toFixed(2);
   }
 
-  $("exec").textContent = d.executed || "—";
-  $("exec").innerHTML = (d.executed || "—") + (d.intervened ? ' <span class="tag">SHIELD</span>' : "");
+  $("exec").innerHTML = (DIR_IT[d.executed] || d.executed || "—") + (d.intervened ? ' <span class="tag">SCUDO</span>' : "");
 
   const risk = d.dead_end_risk ?? 0, reach = d.food_reachable ?? 0;
   $("riskbar").style.width = (risk * 100) + "%";
@@ -212,24 +235,31 @@ function render(frame) {
   $("dps").textContent = (s.steps_per_second ?? 0).toFixed(2) + " /s";
   $("tok").textContent = d.output_tokens ?? 0;
   $("engine").textContent = s.engine || "—";
-  $("hw").textContent = `${s.hardware || "?"} · Local · round ${String(s.round ?? 1).padStart(2, "0")}`;
+  $("hw").textContent = `${s.hardware || "?"} · Locale · partita ${String(s.round ?? 1).padStart(2, "0")}`;
   $("clients").textContent = s.clients ?? 1;
-  $("shieldmode").textContent = s.guarded ? "Laya + cycle safety" : "Laya · shield OFF";
+  $("shieldmode").textContent = s.guarded ? "Laya + scudo" : "Laya · scudo DISATTIVATO";
   $("shield").textContent = String(s.interventions ?? 0).padStart(4, "0");
 
   const t = Math.floor(s.elapsed ?? 0);
   $("clock").textContent = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 
   const st = $("status");
-  st.textContent = s.status || "LIVE";
+  st.textContent = STATUS_IT[s.status] || s.status || "IN DIRETTA";
   st.className = s.status === "GAME OVER" ? "over" : s.status === "BOARD CLEAR" ? "clear" : "live";
 }
+
+// Hover/focus shows the tip via CSS; click pins it open (touch screens), Esc or outside click closes.
+const helpBtn = $("shieldq"), helpTip = $("shieldhelp");
+const setHelp = open => { helpTip.classList.toggle("open", open); helpBtn.setAttribute("aria-expanded", open); };
+helpBtn.addEventListener("click", e => { e.stopPropagation(); setHelp(!helpTip.classList.contains("open")); });
+document.addEventListener("click", e => { if (!helpTip.contains(e.target)) setHelp(false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") setHelp(false); });
 
 function connect() {
   const es = new EventSource("/events");
   es.onmessage = e => render(JSON.parse(e.data));
   es.onerror = () => {
-    $("status").textContent = "RECONNECTING";
+    $("status").textContent = "RICONNESSIONE";
     $("status").className = "over";
     es.close();
     setTimeout(connect, 2000);
