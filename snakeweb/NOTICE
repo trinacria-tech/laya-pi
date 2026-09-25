@@ -1,0 +1,11 @@
+laya-snake-web
+
+Snake rules (game.py) and the decision policy are derived from laya-mlx:
+https://github.com/mizorewww/laya-mlx  Copyright 2026 laya-mlx contributors.
+Licensed under Apache-2.0.
+
+laya-mlx is itself derived from Laya:
+https://github.com/NandhaKishorM/laya  Copyright Convai Innovations and Laya contributors.
+Licensed under Apache-2.0.
+
+This port replaces the MLX runtime with the upstream 'laya' package on CPU torch.

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laya · vetrina API decisionale</title>
+<style>
+  :root{--bg:#090f13;--fg:#e3f3ef;--muted:#68868c;--dim:#20353c;--green:#62f5b5;--amber:#ffce73;--red:#ff7c8c;--cyan:#8ad8e9;--card:#0d171c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.03em;padding:28px}
+  .wrap{max-width:1040px;margin:0 auto}
+  header{border-bottom:1px solid var(--dim);padding-bottom:14px;margin-bottom:8px}
+  h1{font-size:20px;font-weight:500;letter-spacing:.15em;margin:0}
+  .sub{color:var(--muted);font-size:12px;margin-top:6px}
+  .sub b{color:var(--cyan);font-weight:500}
+  .card{background:var(--card);border:1px solid var(--dim);border-radius:6px;padding:18px 20px;margin-top:20px}
+  .card.build{border-color:var(--cyan)}
+  .card h2{font-size:15px;font-weight:500;color:var(--green);margin:0 0 3px}
+  .card.build h2{color:var(--cyan)}
+  .blurb{color:var(--muted);font-size:12px;margin-bottom:12px}
+  textarea{width:100%;background:#0a1216;color:var(--fg);border:1px solid var(--dim);border-radius:4px;
+    font:inherit;padding:9px 11px;resize:none;overflow:hidden;min-height:44px}
+  input[type=text]{background:#0a1216;color:var(--fg);border:1px solid var(--dim);border-radius:4px;font:inherit;padding:6px 9px}
+  select{background:#0a1216;color:var(--fg);border:1px solid var(--dim);border-radius:4px;font:inherit;padding:6px 9px}
+  .qtags{margin:10px 0;display:flex;flex-wrap:wrap;gap:6px}
+  .qtag{font-size:11px;color:var(--muted);border:1px solid var(--dim);border-radius:3px;padding:2px 7px}
+  .qtag b{color:var(--fg);font-weight:500}
+  .run{background:var(--green);color:#052018;border:none;border-radius:4px;padding:7px 16px;font:inherit;
+    font-weight:600;cursor:pointer;letter-spacing:.05em}
+  .run:disabled{opacity:.5;cursor:default}
+  .ghost{background:transparent;color:var(--cyan);border:1px solid var(--dim);border-radius:4px;padding:6px 12px;
+    font:inherit;cursor:pointer}
+  .meta{color:var(--muted);font-size:11px;margin-left:12px}
+  .answers{margin-top:14px;display:grid;gap:12px}
+  .ans{border-top:1px solid var(--dim);padding-top:10px}
+  .ans .name{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.1em}
+  .ans .verdict{font-size:16px;margin-top:2px}
+  .choice-row{display:grid;grid-template-columns:150px 1fr 44px;align-items:center;gap:8px;margin:3px 0;font-size:12px}
+  .choice-row.sel{color:var(--green)}
+  .bar{height:9px;background:var(--dim);border-radius:1px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--muted);width:0}
+  .choice-row.sel .bar>i{background:var(--green)}
+  .gauge{height:9px;background:var(--dim);border-radius:1px;overflow:hidden;max-width:280px}
+  .gauge>i{display:block;height:100%;width:0}
+  .val{text-align:right;font-variant-numeric:tabular-nums}
+  .err{color:var(--red);font-size:12px;margin-top:10px}
+  .qbuild{border:1px solid var(--dim);border-radius:5px;padding:12px;margin:10px 0}
+  .qbuild .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  .qbuild label{color:var(--muted);font-size:11px}
+  .qbuild .rm{background:transparent;border:none;color:var(--red);cursor:pointer;font:inherit;margin-left:auto}
+  .hint{color:var(--muted);font-size:11px;margin:2px 0 6px}
+  footer{color:var(--muted);font-size:11px;margin-top:28px;border-top:1px solid var(--dim);padding-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>LAYA · API DECISIONALE</h1>
+    <div class="sub">Decisioni tipizzate System-1 in un solo passaggio · <b id="engine">connessione…</b> · zero token in uscita</div>
+  </header>
+  <div id="cards"></div>
+  <footer>Ogni scheda invia <code>{state, questions}</code> a <code>/v1/systemone</code>. choice · score · noul — nessuna generazione di testo.</footer>
+</div>
+
+<script>
+const $ = (t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e};
+
+// Grow a textarea to fit its content so the prompt never shows a scrollbar.
+function autoGrow(ta){
+  const fit=()=>{ta.style.height="auto";ta.style.height=(ta.scrollHeight+2)+"px";};
+  ta.addEventListener("input",fit);
+  requestAnimationFrame(fit);
+  return ta;
+}
+
+function qtags(questions){
+  const wrap=$("div","qtags");
+  for(const [k,q] of Object.entries(questions)){
+    const t=$("span","qtag");t.innerHTML=`<b>${k}</b> · ${q.type}`;wrap.appendChild(t);
+  }
+  return wrap;
+}
+function renderChoice(ans){
+  const box=$("div","");
+  const probs=ans.probabilities||{};
+  for(const [label,p] of Object.entries(probs).sort((a,b)=>b[1]-a[1])){
+    const row=$("div","choice-row"+(label===ans.choice?" sel":""));
+    row.appendChild($("span","",label));
+    const bar=$("div","bar");const i=$("i");i.style.width=(p*100)+"%";bar.appendChild(i);
+    row.appendChild(bar);row.appendChild($("span","val",p.toFixed(2)));
+    box.appendChild(row);
+  }
+  return box;
+}
+function renderScore(ans,q){
+  const box=$("div","");
+  const crit=(q&&q.criteria)||[];const n=Math.max(1,crit.length-1);const v=ans.score;
+  box.appendChild($("div","verdict",(crit[Math.round(v)]||"").split(":")[0]+`  (${v.toFixed(2)})`));
+  const g=$("div","gauge");const i=$("i");i.style.background="var(--cyan)";i.style.width=(100*v/n)+"%";g.appendChild(i);
+  box.appendChild(g);return box;
+}
+function renderNoul(ans){
+  const box=$("div","");const p=ans.noul;
+  box.appendChild($("div","verdict",(p>=0.5?"sì":"no")+`  ${p.toFixed(2)}`));
+  const g=$("div","gauge");const i=$("i");i.style.background=p>=0.5?"var(--amber)":"var(--muted)";i.style.width=(p*100)+"%";g.appendChild(i);
+  box.appendChild(g);return box;
+}
+
+// Shared: POST a server body, render typed answers using the given question map.
+async function execute(body, questionsMap, btn, meta, out){
+  btn.disabled=true; out.innerHTML=""; meta.textContent="in corso…";
+  const t0=performance.now();
+  try{
+    const r=await fetch("/api/run",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    const data=await r.json();
+    if(!r.ok||data.error){out.appendChild(Object.assign($("div","err"),{textContent:data.error||("HTTP "+r.status)}));meta.textContent="";return;}
+    meta.textContent=`${Math.round(performance.now()-t0)} ms · ${data.usage?.input_tokens??"?"} token in / 0 out`;
+    for(const [k,ans] of Object.entries(data.answers)){
+      const a=$("div","ans");a.appendChild($("div","name",k));
+      const q=questionsMap[k];
+      a.appendChild(ans.type==="choice"?renderChoice(ans):ans.type==="score"?renderScore(ans,q):renderNoul(ans));
+      out.appendChild(a);
+    }
+  }catch(e){out.appendChild(Object.assign($("div","err"),{textContent:String(e)}));meta.textContent="";}
+  finally{btn.disabled=false}
+}
+
+function exampleCard(ex){
+  const card=$("div","card");
+  card.appendChild($("h2",null,ex.title));
+  card.appendChild($("div","blurb",ex.blurb));
+  const ta=autoGrow($("textarea"));ta.value=ex.state;card.appendChild(ta);
+  card.appendChild(qtags(ex.questions));
+  const btn=$("button","run","Esegui decisione");const meta=$("span","meta","");
+  const line=$("div","");line.appendChild(btn);line.appendChild(meta);card.appendChild(line);
+  const out=$("div","answers");card.appendChild(out);
+  btn.onclick=()=>execute({id:ex.id,state:ta.value}, ex.questions, btn, meta, out);
+  return card;
+}
+
+// ---- Build-your-own decision ---------------------------------------------
+let qseq=0;
+function questionEditor(){
+  const wrap=$("div","qbuild");
+  const row1=$("div","row");
+  const name=Object.assign($("input"),{type:"text",placeholder:"nome (es. categoria)",value:"domanda_"+(++qseq)});
+  const type=$("select");
+  for(const t of ["choice","score","noul"]){const o=$("option",null,t);o.value=t;type.appendChild(o);}
+  const rm=$("button","rm","× rimuovi");rm.onclick=()=>wrap.remove();
+  row1.append(Object.assign($("label"),{textContent:"campo"}),name,Object.assign($("label"),{textContent:"tipo"}),type,rm);
+  wrap.appendChild(row1);
+  const instr=Object.assign($("input"),{type:"text",placeholder:"istruzione (es. Quale reparto?)"});
+  instr.style.width="100%";instr.style.marginBottom="6px";
+  wrap.appendChild(instr);
+  const hint=$("div","hint","");
+  const crit=autoGrow($("textarea"));
+  wrap.appendChild(hint);wrap.appendChild(crit);
+  function sync(){
+    if(type.value==="choice"){hint.textContent="scelte: una per riga, formato  chiave: descrizione";crit.style.display="";crit.placeholder="fatturazione: pagamenti e rimborsi\ntecnico: bug e guasti\naltro: il resto";}
+    else if(type.value==="score"){hint.textContent="livelli ordinati: uno per riga (dal minore al maggiore)";crit.style.display="";crit.placeholder="non urgente\npresto\ncritico";}
+    else{hint.textContent="noul: risposta sì/no, nessuna scelta da elencare";crit.style.display="none";}
+  }
+  type.onchange=sync;sync();
+  wrap.build=()=>{
+    const q={type:type.value,instructions:instr.value.trim()||"?"};
+    const lines=crit.value.split("\n").map(s=>s.trim()).filter(Boolean);
+    if(type.value==="choice"){
+      q.criteria={};
+      for(const ln of lines){const i=ln.indexOf(":");if(i<0){q.criteria[ln]=ln;}else{q.criteria[ln.slice(0,i).trim()]=ln.slice(i+1).trim();}}
+    }else if(type.value==="score"){q.criteria=lines;}
+    return [name.value.trim()||("campo"+qseq), q];
+  };
+  return wrap;
+}
+
+function builderCard(){
+  const card=$("div","card build");
+  card.appendChild($("h2",null,"Componi la tua decisione"));
+  card.appendChild($("div","blurb","Scrivi un testo, definisci le domande (choice / score / noul) e interroga il modello."));
+  const ta=autoGrow($("textarea"));ta.placeholder="Incolla qui il testo da valutare…";
+  ta.value="Mi hanno addebitato due volte e nessuno risponde. Voglio disdire subito.";
+  card.appendChild(ta);
+  const qbox=$("div","");card.appendChild(qbox);
+  qbox.appendChild(questionEditor());
+  const add=$("button","ghost","+ aggiungi domanda");add.onclick=()=>qbox.appendChild(questionEditor());
+  const btn=$("button","run","Esegui decisione");btn.style.marginLeft="10px";
+  const meta=$("span","meta","");
+  const line=$("div","");line.style.marginTop="10px";line.append(add,btn,meta);card.appendChild(line);
+  const out=$("div","answers");card.appendChild(out);
+  btn.onclick=()=>{
+    const questions={};
+    for(const ed of qbox.querySelectorAll(".qbuild")){const [k,q]=ed.build();if(k)questions[k]=q;}
+    if(!Object.keys(questions).length){out.innerHTML="";out.appendChild(Object.assign($("div","err"),{textContent:"aggiungi almeno una domanda"}));return;}
+    execute({state:ta.value,questions}, questions, btn, meta, out);
+  };
+  return card;
+}
+
+async function main(){
+  const examples=await (await fetch("/api/examples")).json();
+  const cards=document.getElementById("cards");
+  cards.appendChild(builderCard());               // craft-your-own first
+  for(const ex of examples) cards.appendChild(exampleCard(ex));
+  try{
+    const r=await fetch("/api/run",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:examples[examples.length-1].id})});
+    const d=await r.json();
+    document.getElementById("engine").textContent = d.model ? ("modello: "+d.model) : "Laya API";
+  }catch(e){document.getElementById("engine").textContent="Laya API";}
+}
+main();
+</script>
+</body>
+</html>

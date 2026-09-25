@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>laya-snake / local intelligence</title>
+<style>
+  :root {
+    --bg: #090f13;
+    --fg: #e3f3ef;
+    --muted: #68868c;
+    --dim: #20353c;
+    --green: #62f5b5;
+    --amber: #ffce73;
+    --red: #ff7c8c;
+    --cyan: #8ad8e9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .06em;
+    padding: 24px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    color: var(--muted); border-bottom: 1px solid var(--dim); padding-bottom: 10px;
+  }
+  #status.live { color: var(--green); }
+  #status.over { color: var(--red); }
+  #status.clear { color: var(--cyan); }
+  main { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 40px; margin-top: 26px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size: 20px; letter-spacing: .5em; font-weight: 500; margin: 0 0 18px; }
+  canvas { width: 100%; height: auto; border: 1px solid var(--dim); border-radius: 3px; image-rendering: pixelated; }
+  .scores { display: flex; gap: 42px; margin-top: 22px; }
+  .score-label { color: var(--muted); font-size: 11px; }
+  .score-value { font-size: 40px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .fill { color: var(--muted); font-size: 11px; margin-top: 14px; }
+  .track { height: 3px; background: var(--dim); margin-top: 6px; border-radius: 2px; overflow: hidden; }
+  .track > i { display: block; height: 100%; background: var(--green); width: 0; transition: width .2s; }
+  .panel h2 { font-size: 14px; font-weight: 500; color: var(--green); margin: 0; letter-spacing: .1em; }
+  .sub { color: var(--muted); font-size: 11px; margin-bottom: 22px; }
+  .cap { color: var(--muted); font-size: 11px; margin: 20px 0 8px; }
+  .prob { display: grid; grid-template-columns: 62px 1fr 42px; align-items: center; gap: 8px; margin: 5px 0; }
+  .prob .bar { height: 11px; background: var(--dim); border-radius: 1px; overflow: hidden; }
+  .prob .bar > i { display: block; height: 100%; background: var(--muted); width: 0; transition: width .15s; }
+  .prob.sel { color: var(--green); }
+  .prob.sel .bar > i { background: var(--green); }
+  .prob .val { text-align: right; font-variant-numeric: tabular-nums; }
+  .rows { margin-top: 20px; }
+  .row { display: flex; justify-content: space-between; margin: 3px 0; }
+  .row span:first-child { color: var(--muted); }
+  .tag { color: var(--amber); }
+  .offline { color: var(--green); }
+  footer { margin-top: 30px; border-top: 1px solid var(--dim); padding-top: 10px; color: var(--muted); font-size: 11px;
+           display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span>LAYA&nbsp; /&nbsp; LOCAL INTELLIGENCE</span>
+    <span id="status" class="live">CONNECTING</span>
+  </header>
+
+  <main>
+    <section>
+      <h1>S N A K E</h1>
+      <canvas id="board" width="480" height="320"></canvas>
+      <div class="scores">
+        <div><div class="score-label">SCORE</div><div class="score-value" id="score" style="color:var(--green)">000</div></div>
+        <div><div class="score-label">LENGTH</div><div class="score-value" id="length">000</div></div>
+        <div><div class="score-label">BEST</div><div class="score-value" id="best" style="color:var(--muted)">000</div></div>
+      </div>
+      <div class="track"><i id="fill"></i></div>
+      <div class="fill"><span id="fillpct">0.0%</span> of board</div>
+    </section>
+
+    <section class="panel">
+      <h2>Laya multilingual</h2>
+      <div class="sub" id="hw">loading…</div>
+
+      <div class="cap">NEXT MOVE &nbsp;·&nbsp; MODEL PROBABILITIES</div>
+      <div id="probs"></div>
+
+      <div class="rows">
+        <div class="row"><span>EXECUTING</span><span id="exec" style="color:var(--green)">—</span></div>
+      </div>
+
+      <div class="cap">DEAD-END RISK</div>
+      <div class="track"><i id="riskbar" style="background:var(--amber)"></i></div>
+      <div class="row"><span></span><span id="risk" class="tag">0.00</span></div>
+
+      <div class="cap">FOOD REACHABLE</div>
+      <div class="track"><i id="foodbar" style="background:var(--cyan)"></i></div>
+      <div class="row"><span></span><span id="food" style="color:var(--cyan)">0.00</span></div>
+
+      <div class="rows">
+        <div class="row"><span>INFERENCE</span><span id="inf">— ms</span></div>
+        <div class="row"><span>DECISIONS</span><span id="dps">— /s</span></div>
+        <div class="row"><span>OUTPUT TOKENS</span><span id="tok">0</span></div>
+        <div class="row"><span>NETWORK</span><span class="offline">OFFLINE</span></div>
+        <div class="row"><span>ENGINE</span><span id="engine" style="color:var(--muted)">—</span></div>
+        <div class="row"><span>SPECTATORS</span><span id="clients">1</span></div>
+      </div>
+
+      <div class="rows">
+        <div class="row"><span id="shieldmode">Laya + cycle safety</span></div>
+        <div class="row"><span>Shield interventions</span><span id="shield" class="tag">0000</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>ESTIMATES BY LAYA · decisions computed on the Pi</span>
+    <span id="clock">00:00</span>
+  </footer>
+</div>
+
+<script>
+const DIRS = ["UP", "DOWN", "LEFT", "RIGHT"];
+const $ = id => document.getElementById(id);
+const canvas = $("board"), ctx = canvas.getContext("2d");
+const CELL = 20;
+
+// Build the probability rows once, then only mutate their values per frame.
+const rows = {};
+for (const d of DIRS) {
+  const el = document.createElement("div");
+  el.className = "prob";
+  el.innerHTML = `<span class="name"></span><div class="bar"><i></i></div><span class="val">0.00</span>`;
+  el.querySelector(".name").textContent = d;
+  $("probs").appendChild(el);
+  rows[d] = el;
+}
+
+const pad3 = n => String(n).padStart(3, "0");
+
+function drawBoard(g) {
+  const w = g.width * CELL, h = g.height * CELL;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  ctx.fillStyle = "#0b1418";
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.fillStyle = "#13272e";
+  for (let y = 0; y < g.height; y++)
+    for (let x = 0; x < g.width; x++)
+      ctx.fillRect(x * CELL + CELL / 2 - 1, y * CELL + CELL / 2 - 1, 2, 2);
+
+  // Tail fades toward the body colour, matching the terminal build.
+  g.body.slice().reverse().forEach((cell, i) => {
+    const index = g.body.length - 1 - i;
+    const f = 1 - index / Math.max(1, g.body.length);
+    ctx.fillStyle = index === 0 ? "#dcfff0"
+      : `rgb(${Math.round(18 + 64 * f)},${Math.round(73 + 150 * f)},${Math.round(57 + 102 * f)})`;
+    ctx.fillRect(cell[0] * CELL, cell[1] * CELL, CELL - 1, CELL - 1);
+  });
+
+  if (g.food) {
+    ctx.fillStyle = "#ffce73";
+    ctx.beginPath();
+    ctx.arc(g.food[0] * CELL + CELL / 2, g.food[1] * CELL + CELL / 2, CELL / 2 - 3, 0, 7);
+    ctx.fill();
+  }
+}
+
+function render(frame) {
+  const g = frame.game, d = frame.decision || {}, s = frame.stats || {};
+  drawBoard(g);
+
+  $("score").textContent = pad3(g.score);
+  $("length").textContent = pad3(g.length);
+  $("best").textContent = pad3(s.best ?? g.score);
+  const pct = 100 * g.length / (g.width * g.height);
+  $("fill").style.width = pct + "%";
+  $("fillpct").textContent = pct.toFixed(1) + "%";
+
+  const probs = d.probabilities || {};
+  for (const dir of DIRS) {
+    const p = probs[dir] ?? 0;
+    rows[dir].classList.toggle("sel", dir === d.proposed);
+    rows[dir].querySelector("i").style.width = (p * 100) + "%";
+    rows[dir].querySelector(".val").textContent = p.toFixed(2);
+  }
+
+  $("exec").textContent = d.executed || "—";
+  $("exec").innerHTML = (d.executed || "—") + (d.intervened ? ' <span class="tag">SHIELD</span>' : "");
+
+  const risk = d.dead_end_risk ?? 0, reach = d.food_reachable ?? 0;
+  $("riskbar").style.width = (risk * 100) + "%";
+  $("riskbar").style.background = risk < 0.5 ? "var(--amber)" : "var(--red)";
+  $("risk").textContent = risk.toFixed(2);
+  $("foodbar").style.width = (reach * 100) + "%";
+  $("food").textContent = reach.toFixed(2);
+
+  $("inf").textContent = (d.inference_ms ?? 0).toFixed(0) + " ms";
+  $("dps").textContent = (s.steps_per_second ?? 0).toFixed(2) + " /s";
+  $("tok").textContent = d.output_tokens ?? 0;
+  $("engine").textContent = s.engine || "—";
+  $("hw").textContent = `${s.hardware || "?"} · Local · round ${String(s.round ?? 1).padStart(2, "0")}`;
+  $("clients").textContent = s.clients ?? 1;
+  $("shieldmode").textContent = s.guarded ? "Laya + cycle safety" : "Laya · shield OFF";
+  $("shield").textContent = String(s.interventions ?? 0).padStart(4, "0");
+
+  const t = Math.floor(s.elapsed ?? 0);
+  $("clock").textContent = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+
+  const st = $("status");
+  st.textContent = s.status || "LIVE";
+  st.className = s.status === "GAME OVER" ? "over" : s.status === "BOARD CLEAR" ? "clear" : "live";
+}
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => {
+    $("status").textContent = "RECONNECTING";
+    $("status").className = "over";
+    es.close();
+    setTimeout(connect, 2000);
+  };
+}
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+services:
+  # laya-serve for LAN API callers: auto-routes by language, capped to ONE resident
+  # checkpoint (RAM margin alongside the ONNX service; a language switch reloads).
+  # Published to the LAN so a laptop can call /v1/systemone directly.
+  laya:
+    # Not started by default (single-model ONNX is the running stack). Bring it back with:
+    #   docker compose --profile torch up -d laya
+    profiles: ["torch"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: laya:pi
+    container_name: laya
+    # Auto-routing kept on, but capped to one resident checkpoint (RAM margin with
+    # the ONNX service also running). See laya_capped.py.
+    command: ["python", "laya_capped.py"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - laya-models:/models
+    environment:
+      LAYA_HOST: "0.0.0.0"
+      LAYA_PORT: "8000"
+      LAYA_DEVICE: cpu
+      # Preloaded checkpoint; others load on demand and evict this one (max_loaded=1).
+      LAYA_MODEL: multilingual
+      LAYA_THREADS: "3"
+      HF_HOME: /models
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 600s
+      retries: 5
+
+  # ONNX Runtime (fp32) service the snake uses for the ~1.3-1.65x speedup. Same
+  # /v1/systemone wire protocol. Also published so a laptop can hit it directly.
+  laya-onnx:
+    image: laya:pi
+    container_name: laya-onnx
+    command: ["python", "laya_onnx_serve.py"]
+    ports:
+      - "8001:8001"
+    volumes:
+      - laya-models:/models
+    environment:
+      LAYA_HOST: "0.0.0.0"
+      LAYA_PORT: "8001"
+      ONNX_REPO: soyelmismo/laya-multilingual-onnx
+      ONNX_FILE: model-fp32.onnx
+      # Snake is the primary compute; laya-serve is idle except on rare API calls,
+      # so let ONNX use all 4 cores (measured ~2.2s vs ~2.5s at 3). Brief contention
+      # if an API call collides is acceptable.
+      ORT_THREADS: "4"
+      HF_HOME: /models
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 600s
+      retries: 5
+
+  # The autonomous snake in its own container. Holds no weights; asks laya-onnx for
+  # every move -- but only while a spectator is attached (idle = zero CPU / no calls).
+  snake:
+    image: laya:pi
+    container_name: laya-snake
+    depends_on:
+      laya-onnx:
+        condition: service_healthy
+    command: ["python", "-m", "snakeweb.server", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    environment:
+      LAYA_URL: http://laya-onnx:8001
+      LAYA_MODEL: multilingual
+    restart: unless-stopped
+
+  # API showcase: five example typed decisions (email, moderation, router, triage,
+  # multilingual) run against the Laya API. Proxies inference server-side (same-origin,
+  # no CORS). A live playground for the /v1/systemone endpoint.
+  showcase:
+    image: laya:pi
+    container_name: laya-showcase
+    depends_on:
+      laya-onnx:
+        condition: service_healthy
+    command: ["python", "-m", "showcase.server", "--host", "0.0.0.0", "--port", "8090"]
+    ports:
+      - "8091:8090"
+    environment:
+      LAYA_URL: http://laya-onnx:8001
+    restart: unless-stopped
+
+volumes:
+  laya-models:
