@@ -4,7 +4,7 @@ The game runs server-side in its own thread: every move is a real Laya forward
 pass on this machine. Browsers are pure spectators — they receive frames and
 render them, and never drive the game.
 
-    python -m snakeweb.server --host 0.0.0.0 --port 8000
+    python -m snakeweb.server --host 0.0.0.0 --port 8080
 """
 
 import argparse
