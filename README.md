@@ -72,6 +72,8 @@ showcase/             vetrina dell'API: catalogo di esempi + proxy same-origin
 bench.py              benchmark di latenza / memoria su sette lingue
 smoke.py              verifica rapida che il checkpoint si carichi
 onnx_probe.py         controllo dell'export ONNX e misura di latenza
+scripts/              exhibition-wifi.sh: isola l'hotspot (modalità fiera)
+docs/                 guide aggiuntive
 ```
 
 ## Note sul Raspberry Pi
@@ -90,6 +92,9 @@ Lezioni imparate sul campo con un Pi 4 (Cortex-A72, 4 core, senza swap):
   meno di 400 MB liberi, quindi `laya_capped.py` ne tiene in memoria uno solo.
 - **A riposo, davvero a riposo.** Il serpente gioca solo quando almeno uno
   spettatore è connesso: senza pubblico il Pi non esegue inferenza.
+- **Modalità fiera.** `sudo scripts/exhibition-wifi.sh on|off|status` isola
+  l'hotspot Wi-Fi dalla LAN per simulare la fiera; vedi
+  [docs/exhibition-wifi.md](docs/exhibition-wifi.md).
 
 Latenza tipica sul Pi: ~2,2 s per decisione con ONNX (4 thread), ~4,2 s con torch.
 

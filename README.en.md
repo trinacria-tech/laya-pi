@@ -71,6 +71,8 @@ showcase/             API playground: example catalogue + same-origin proxy
 bench.py              latency / memory benchmark across seven languages
 smoke.py              quick "does the checkpoint load" check
 onnx_probe.py         ONNX export sanity check and latency probe
+scripts/              exhibition-wifi.sh: isolate the hotspot (exhibition mode)
+docs/                 extra guides
 ```
 
 ## Raspberry Pi notes
@@ -89,6 +91,9 @@ Things learned the hard way on a Pi 4 (Cortex-A72, 4 cores, no swap):
   under 400 MB free, so `laya_capped.py` keeps only one checkpoint resident.
 - **Idle means idle.** The snake only plays while at least one spectator is
   connected, so the Pi does no inference when nobody is watching.
+- **Exhibition mode.** `sudo scripts/exhibition-wifi.sh on|off|status` isolates
+  the Wi-Fi hotspot from the LAN to simulate the exhibition; see
+  [docs/exhibition-wifi.en.md](docs/exhibition-wifi.en.md).
 
 Typical latency on the Pi: ~2.2 s per decision with ONNX (4 threads), ~4.2 s
 with torch.
