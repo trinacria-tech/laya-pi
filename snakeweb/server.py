@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .game import SnakeGame
-from .policy import LayaPolicy
+from .policy import PROMPTS, LayaPolicy, LayaUnavailable
 
 STATIC = Path(__file__).parent / "static"
 MAX_CLIENTS = 32
@@ -84,6 +84,35 @@ class Runner(threading.Thread):
         self.interventions = 0
         self.started = time.time()
         self.ready = threading.Event()
+        # Mode/model picked in the UI; applied by the game thread between moves so a
+        # decision never straddles a switch.
+        self._pending = {}
+        self._pending_lock = threading.Lock()
+        self.models = []
+
+    def request_settings(self, mode=None, model=None):
+        if mode is not None and mode not in PROMPTS:
+            raise ValueError(f"unknown mode {mode!r}")
+        if model is not None and model not in {m["name"] for m in self.models}:
+            raise ValueError(f"unknown model {model!r}")
+        with self._pending_lock:
+            if mode is not None:
+                self._pending["mode"] = mode
+            if model is not None:
+                self._pending["model"] = model
+
+    def _apply_settings(self, game):
+        with self._pending_lock:
+            pending, self._pending = self._pending, {}
+        if "mode" in pending:
+            self.policy.mode = pending["mode"]
+        model = pending.get("model")
+        if model and model != self.policy.client.model:
+            self.bus.publish(self._frame(game, None, status="LOADING MODEL"))
+            try:
+                self.policy.client.load(model)  # Server evicts the old one first.
+            except LayaUnavailable as error:
+                print(f"model switch to {model} failed: {error}")
 
     def _frame(self, game, decision, *, status):
         elapsed = time.time() - self.started
@@ -101,6 +130,10 @@ class Runner(threading.Thread):
                 "steps_per_second": moves_done / max(0.001, elapsed),
                 "clients": self.bus.client_count,
                 "status": status,
+                "mode": self.policy.mode,
+                "model": self.policy.client.model,
+                "modes": list(PROMPTS),
+                "models": [m["name"] for m in self.models],
                 **self.policy.metadata,
             },
         }
@@ -108,6 +141,7 @@ class Runner(threading.Thread):
     def run(self):
         self.moves_total = 0
         self.policy = LayaPolicy(guarded=self.guarded)
+        self.models = self.policy.client.models().get("models", [])
         self.ready.set()
 
         while True:
@@ -123,6 +157,7 @@ class Runner(threading.Thread):
                 if not self.bus.has_clients.is_set():
                     self.bus.publish(self._frame(game, None, status="PAUSED · no player"))
                     self.bus.has_clients.wait()
+                self._apply_settings(game)
                 tick_start = time.perf_counter()
                 try:
                     decision = self.policy.decide(game)
@@ -155,6 +190,7 @@ class Runner(threading.Thread):
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     bus: Broadcaster = None
+    runner: "Runner" = None
 
     def log_message(self, fmt, *args):
         pass  # Keep the console readable; the game loop prints its own progress.
@@ -180,6 +216,19 @@ class Handler(BaseHTTPRequestHandler):
             pass
         else:
             self._send(404, b"not found", "text/plain")
+
+    def do_POST(self):
+        if self.path.split("?")[0] != "/api/settings":
+            self._send(404, b"not found", "text/plain")
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(min(length, 4096)) or b"{}")
+            self.runner.request_settings(mode=body.get("mode"), model=body.get("model"))
+        except (ValueError, AttributeError) as error:
+            self._send(400, str(error).encode(), "text/plain")
+            return
+        self._send(200, b"ok", "text/plain")
 
     _CTYPES = {".ttf": "font/ttf", ".woff2": "font/woff2", ".css": "text/css",
                ".js": "text/javascript", ".png": "image/png", ".svg": "image/svg+xml"}
@@ -241,6 +290,7 @@ def main():
     ap.add_argument("--height", type=int, default=16)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--min-tick", type=float, default=0.0, help="Floor on seconds per move")
+    ap.add_argument("--mode", choices=list(PROMPTS), default="easy", help="Starting prompt mode")
     ap.add_argument("--no-shield", action="store_true", help="Disable the cycle safety shield")
     args = ap.parse_args()
 
@@ -253,6 +303,7 @@ def main():
         guarded=not args.no_shield,
         min_tick=args.min_tick,
     )
+    runner.request_settings(mode=args.mode)
     from .policy import LAYA_URL
 
     print(f"waiting for laya-serve at {LAYA_URL} (it preloads checkpoints on first boot)...")
@@ -261,6 +312,7 @@ def main():
     print("laya-serve reachable; game running")
 
     Handler.bus = bus
+    Handler.runner = runner
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     print(f"spectate on the LAN:  http://{lan_ip()}:{args.port}/")

@@ -5,3 +5,6 @@ venv/
 .env
 *.onnx
 .DS_Store
+
+# Local compose overrides
+docker-compose.override.yml

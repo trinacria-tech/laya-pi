@@ -27,8 +27,20 @@ MAX_BODY = 64 * 1024
 BY_ID = {e["id"]: e for e in EXAMPLES}
 
 
-def ask_laya(state, questions):
-    payload = json.dumps({"state": state, "questions": questions}).encode()
+def list_models():
+    """Selectable models on the ONNX service (one resident at a time)."""
+    try:
+        with urllib.request.urlopen(f"{LAYA_URL}/v1/models", timeout=5) as resp:
+            return json.loads(resp.read())
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        return {"loaded": None, "models": []}
+
+
+def ask_laya(state, questions, model=None):
+    body = {"state": state, "questions": questions}
+    if model:
+        body["model"] = model  # A different model makes the server swap it in first.
+    payload = json.dumps(body).encode()
     req = urllib.request.Request(
         f"{LAYA_URL}/v1/systemone",
         data=payload,
@@ -62,6 +74,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/examples":
             # The catalogue, minus nothing -- the page renders questions client-side.
             self._send(200, json.dumps(EXAMPLES), "application/json")
+        elif path == "/api/models":
+            self._send(200, json.dumps(list_models()), "application/json")
         elif self._serve_static(path):
             pass
         else:
@@ -108,7 +122,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
         try:
-            result = ask_laya(state, questions)
+            result = ask_laya(state, questions, body.get("model"))
+        except urllib.error.HTTPError as e:
+            self._send(e.code, json.dumps({"error": e.read()[:300].decode(errors="replace")}),
+                       "application/json")
+            return
         except (urllib.error.URLError, TimeoutError) as e:
             self._send(502, json.dumps({"error": f"laya unreachable: {e}"}), "application/json")
             return

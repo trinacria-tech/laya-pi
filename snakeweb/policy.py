@@ -44,6 +44,9 @@ class Decision:
     output_tokens: int
     safe_count: int
     planner_best: str
+    mode: str
+    model: str
+    request: dict  # Exact /v1/systemone body sent for this move (shown in the UI).
 
     def to_dict(self):
         return asdict(self)
@@ -100,29 +103,112 @@ class LayaClient:
                     raise
                 time.sleep(delay)
 
-    def predict(self, state, questions):
-        return self._post("/v1/systemone", {
-            "state": state,
-            "questions": questions,
-            "model": self.model,
-        })
+    def models(self):
+        """Registry + resident model from the ONNX service; stock laya-serve has no list."""
+        try:
+            with urllib.request.urlopen(f"{self.base_url}/v1/models", timeout=5) as response:
+                return json.loads(response.read())
+        except Exception:
+            return {"loaded": self.model, "models": [{"name": self.model}]}
+
+    def load(self, model):
+        """Swap the server's one resident model (blocks while it loads)."""
+        self._post("/v1/models/load", {"model": model})
+        self.model = model
+
+    def request_body(self, state, questions):
+        return {"state": state, "questions": questions, "model": self.model}
+
+    def predict(self, body):
+        return self._post("/v1/systemone", body)
+
+
+def easy_prompt(game, moves, safe, preferred):
+    """Planner pre-labels every move; the model only reads the labels (original demo)."""
+    reachable, _ = game.food_reachability()
+    state = (
+        f"Safe route: {'yes' if safe else 'no'}. "
+        f"Food reachable through empty cells: {'yes' if reachable else 'no'}."
+    )
+    # Only the move choice goes to the model. The risk/food gauges used to be two
+    # extra noul questions (~90 more tokens, ~3x the latency); they are derived from
+    # the deterministic planner instead -- free, exact, and the shield (not the
+    # model's noul) is what actually keeps the snake alive.
+    questions = {
+        "move": {
+            "type": "choice",
+            "instructions": "Choose the best safe move toward food.",
+            "criteria": {
+                m.direction: (
+                    "Blocked. Collision."
+                    if not m.legal
+                    else "Unsafe. Traps the snake."
+                    if not m.safe
+                    else "Safe. Eat food now. Best."
+                    if m.eats
+                    else "Safe. Best route to food."
+                    if m.direction == preferred
+                    else "Safe. Slower route."
+                )
+                for m in moves
+            },
+        },
+    }
+    return state, questions
+
+
+# PLACEHOLDER until the fine-tune lands: board-only prompt in the same shape as
+# handoff/snake-finetune/gen_snake_dataset.py (ASCII grid, neutral criteria). Replace
+# with the final training prompt so inference matches what the model was tuned on.
+HARD_LEGEND = "Snake board. H head, S body, T tail, F food, . empty. Walls surround the board."
+HARD_QUESTIONS = {
+    "move": {
+        "type": "choice",
+        "instructions": "Read the board and choose the snake's next move.",
+        "criteria": {
+            "UP": "Move the head one cell up.",
+            "DOWN": "Move the head one cell down.",
+            "LEFT": "Move the head one cell left.",
+            "RIGHT": "Move the head one cell right.",
+        },
+    },
+}
+
+
+def hard_prompt(game, moves, safe, preferred):
+    """Model sees only the board; no planner hints."""
+    grid = [["."] * game.width for _ in range(game.height)]
+    for x, y in game.body:
+        grid[y][x] = "S"
+    tx, ty = game.body[-1]
+    grid[ty][tx] = "T"
+    hx, hy = game.body[0]
+    grid[hy][hx] = "H"
+    if game.food:
+        fx, fy = game.food
+        grid[fy][fx] = "F"
+    rows = "\n".join("".join(r) for r in grid)
+    return f"{HARD_LEGEND}\nLength {len(game.body)}.\n{rows}", HARD_QUESTIONS
+
+
+PROMPTS = {"easy": easy_prompt, "hard": hard_prompt}
 
 
 class LayaPolicy:
-    def __init__(self, *, guarded=True, client=None):
+    def __init__(self, *, guarded=True, client=None, mode="easy"):
         self.client = client or LayaClient()
         self.guarded = guarded
+        if mode not in PROMPTS:
+            raise ValueError(f"unknown mode {mode!r}")
+        self.mode = mode
         health = self.client.wait_until_ready()
         # Derive the engine label from whichever server answered: the ONNX service
         # reports {"backend": "onnx"}, stock laya-serve reports {"device": ...}.
         if health.get("backend") == "onnx":
             engine = "ONNX Runtime · fp32"
-            name = f"laya-onnx · {self.client.model}"
         else:
             engine = f"laya-serve · torch {health.get('device', 'cpu')}"
-            name = f"laya-serve · {self.client.model}"
         self.metadata = {
-            "name": name,
             "hardware": platform.machine(),
             "engine": engine,
             "network": "LAN service",
@@ -139,37 +225,11 @@ class LayaPolicy:
             raise RuntimeError("Cycle safety invariant violated: no safe action")
         preferred = max(safe, key=lambda m: m.advance).direction if safe else "NONE"
         reachable, space = game.food_reachability()
-        state = (
-            f"Safe route: {'yes' if safe else 'no'}. "
-            f"Food reachable through empty cells: {'yes' if reachable else 'no'}."
-        )
-        # Only the move choice goes to the model now. The risk/food gauges used to be
-        # two extra noul questions (~90 more tokens, ~3x the latency); they are derived
-        # here from the deterministic planner instead -- free, exact, and the shield
-        # (not the model's noul) is what actually keeps the snake alive.
-        questions = {
-            "move": {
-                "type": "choice",
-                "instructions": "Choose the best safe move toward food.",
-                "criteria": {
-                    m.direction: (
-                        "Blocked. Collision."
-                        if not m.legal
-                        else "Unsafe. Traps the snake."
-                        if not m.safe
-                        else "Safe. Eat food now. Best."
-                        if m.eats
-                        else "Safe. Best route to food."
-                        if m.direction == preferred
-                        else "Safe. Slower route."
-                    )
-                    for m in moves
-                },
-            },
-        }
-
+        mode = self.mode  # Read once: the server thread may flip it mid-decision.
+        state, questions = PROMPTS[mode](game, moves, safe, preferred)
+        body = self.client.request_body(state, questions)
         inference_start = time.perf_counter()
-        output = self.client.predict(state, questions)
+        output = self.client.predict(body)
         inference_ms = (time.perf_counter() - inference_start) * 1000
 
         answers = output["answers"]
@@ -206,4 +266,7 @@ class LayaPolicy:
             output_tokens=usage.get("output_tokens", 0),
             safe_count=len(safe),
             planner_best=preferred,
+            mode=mode,
+            model=output.get("model") or body["model"],
+            request=body,
         )

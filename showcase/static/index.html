@@ -67,6 +67,9 @@
   .qbuild label{color:var(--muted);font-size:11px}
   .qbuild .rm{background:transparent;border:none;color:var(--red);cursor:pointer;font:inherit;margin-left:auto}
   .hint{color:var(--muted);font-size:11px;margin:2px 0 6px}
+  .modelpick{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:11px;color:var(--muted)}
+  .modelpick select{font:inherit;letter-spacing:inherit;color:var(--fg);background:transparent;border:1px solid var(--dim);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .modelpick select option{background:var(--bg);color:var(--fg)}
   footer{color:var(--muted);font-size:11px;margin-top:28px;border-top:1px solid var(--dim);padding-top:12px}
 </style>
 </head>
@@ -76,12 +79,16 @@
     <div class="term-chrome"><i></i><i></i><i></i><span>laya — ~/showcase</span></div>
     <h1>LAYA · API DECISIONALE</h1>
     <div class="sub">Decisioni tipizzate System-1 in un solo passaggio · <b id="engine">connessione…</b> · zero token in uscita</div>
+    <label class="modelpick">MODELLO <select id="model" disabled></select>
+      <span>un solo modello in memoria: cambiarlo lo ricarica (anche per il serpente)</span></label>
   </header>
   <div id="cards"></div>
   <footer>Ogni scheda invia <code>{state, questions}</code> a <code>/v1/systemone</code>. choice · score · noul — nessuna generazione di testo.</footer>
 </div>
 
 <script>
+const MODEL_IT = {multilingual:"multilingue"};
+const modelName = m => MODEL_IT[m] || m;
 const $ = (t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e};
 
 // Grow a textarea to fit its content so the prompt never shows a scrollbar.
@@ -129,11 +136,13 @@ function renderNoul(ans){
 async function execute(body, questionsMap, btn, meta, out){
   btn.disabled=true; out.innerHTML=""; meta.textContent="in corso…";
   const t0=performance.now();
+  const model=document.getElementById("model").value;
+  if(model) body={...body,model};
   try{
     const r=await fetch("/api/run",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
     const data=await r.json();
     if(!r.ok||data.error){out.appendChild(Object.assign($("div","err"),{textContent:data.error||("HTTP "+r.status)}));meta.textContent="";return;}
-    meta.textContent=`${Math.round(performance.now()-t0)} ms · ${data.usage?.input_tokens??"?"} token in / 0 out`;
+    meta.textContent=`${Math.round(performance.now()-t0)} ms · ${data.usage?.input_tokens??"?"} token in ingresso / 0 in uscita · ${data.model?modelName(data.model):"?"}`;
     for(const [k,ans] of Object.entries(data.answers)){
       const a=$("div","ans");a.appendChild($("div","name",k));
       const q=questionsMap[k];
@@ -220,11 +229,15 @@ async function main(){
   const cards=document.getElementById("cards");
   cards.appendChild(builderCard());               // craft-your-own first
   for(const ex of examples) cards.appendChild(exampleCard(ex));
+  const engine=document.getElementById("engine"), sel=document.getElementById("model");
   try{
-    const r=await fetch("/api/run",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:examples[examples.length-1].id})});
-    const d=await r.json();
-    document.getElementById("engine").textContent = d.model ? ("modello: "+d.model) : "Laya API";
-  }catch(e){document.getElementById("engine").textContent="Laya API";}
+    const m=await (await fetch("/api/models")).json();
+    sel.replaceChildren(...m.models.map(x=>new Option(modelName(x.name),x.name)));
+    if(m.loaded) sel.value=m.loaded;
+    sel.disabled=!m.models.length;
+    engine.textContent = m.loaded ? ("modello: "+modelName(m.loaded)) : "Laya API";
+  }catch(e){engine.textContent="Laya API";}
+  sel.addEventListener("change",()=>{engine.textContent="modello: "+modelName(sel.value);});
 }
 main();
 </script>

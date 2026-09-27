@@ -48,8 +48,12 @@ services:
     environment:
       LAYA_HOST: "0.0.0.0"
       LAYA_PORT: "8001"
-      ONNX_REPO: soyelmismo/laya-multilingual-onnx
-      ONNX_FILE: model-fp32.onnx
+      # Selectable models; only ONE is resident at a time (a switch evicts the old one).
+      # Add the snake fine-tune here once exported, e.g. mount its dir and:
+      #   "snake": {"path": "/finetune/laya_snake", "file": "model-fp32.onnx"}
+      ONNX_MODELS: >-
+        {"multilingual": {"repo": "soyelmismo/laya-multilingual-onnx", "file": "model-fp32.onnx"}}
+      ONNX_DEFAULT: multilingual
       # Snake is the primary compute; laya-serve is idle except on rare API calls,
       # so let ONNX use all 4 cores (measured ~2.2s vs ~2.5s at 3). Brief contention
       # if an API call collides is acceptable.
