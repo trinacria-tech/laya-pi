@@ -85,7 +85,11 @@
     border: 1px solid var(--dim); padding: 4px 10px; cursor: pointer;
   }
   .seg button:first-child { border-radius: 6px 0 0 6px; }
-  .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; }
+  .seg button + button { border-left: 0; }
+  .seg button[hidden] { display: none; }
+  .faq-link { color: var(--muted); text-decoration: none; border: 1px solid var(--dim); border-radius: 6px; padding: 2px 8px; margin-right: 14px; font-size: 11px; }
+  .faq-link:hover, .faq-link:focus-visible { color: var(--green); border-color: var(--green); outline: none; }
   .seg button[aria-pressed="true"] { color: var(--bg); background: var(--green); border-color: var(--green); }
   .controls select { border-radius: 6px; width: 100%; }
   .controls select option { background: var(--bg); color: var(--fg); }
@@ -104,7 +108,7 @@
 <div class="wrap">
   <header>
     <span class="term-chrome"><i></i><i></i><i></i><span>LAYA&nbsp; /&nbsp; INTELLIGENZA LOCALE</span></span>
-    <span id="status" class="live">CONNESSIONE</span>
+    <span><a class="faq-link" href="/faq">FAQ · COME FUNZIONA</a><span id="status" class="live">CONNESSIONE</span></span>
   </header>
 
   <main>
@@ -129,6 +133,7 @@
         <div class="seg" id="modes">
           <button type="button" data-mode="easy" aria-pressed="false">FACILE</button>
           <button type="button" data-mode="hard" aria-pressed="false">DIFFICILE</button>
+          <button type="button" data-mode="rl" aria-pressed="false" hidden>RL</button>
         </div>
         <label for="model">MODELLO</label>
         <select id="model"></select>
@@ -172,10 +177,10 @@
   </main>
 
   <section class="input" aria-label="Input inviato al modello">
-    <div class="cap"><span>INPUT INVIATO A LAYA &nbsp;·&nbsp; ULTIMA MOSSA &nbsp;·&nbsp; TESTO ORIGINALE, NON MODIFICABILE</span><span id="inmeta">—</span></div>
+    <div class="cap"><span id="incap">INPUT INVIATO A LAYA &nbsp;·&nbsp; ULTIMA MOSSA &nbsp;·&nbsp; TESTO ORIGINALE, NON MODIFICABILE</span><span id="inmeta">—</span></div>
     <div class="input-grid">
-      <div><div class="cap">STATO</div><pre id="instate">—</pre></div>
-      <div><div class="cap">DOMANDE</div><pre id="inquestions">—</pre></div>
+      <div><div class="cap" id="instatecap">STATO</div><pre id="instate">—</pre></div>
+      <div><div class="cap" id="inquestionscap">DOMANDE</div><pre id="inquestions">—</pre></div>
     </div>
   </section>
 
@@ -196,8 +201,8 @@ const STATUS_IT = {
   "BOARD CLEAR": "TABELLONE COMPLETATO",
   "LOADING MODEL": "CARICAMENTO MODELLO",
 };
-const MODE_IT = { easy: "FACILE", hard: "DIFFICILE" };
-const MODEL_IT = { multilingual: "multilingue" };
+const MODE_IT = { easy: "FACILE", hard: "DIFFICILE", rl: "RL" };
+const MODEL_IT = { multilingual: "multilingue", "snake-rl": "rete RL (PPO)" };
 const modelName = m => MODEL_IT[m] || m;
 const $ = id => document.getElementById(id);
 const canvas = $("board"), ctx = canvas.getContext("2d");
@@ -278,25 +283,35 @@ function render(frame) {
   $("engine").textContent = s.engine || "—";
   $("hw").textContent = `${s.hardware || "?"} · Locale · partita ${String(s.round ?? 1).padStart(2, "0")}`;
   $("clients").textContent = s.clients ?? 1;
-  $("shieldmode").textContent = s.guarded ? "Laya + scudo" : "Laya · scudo DISATTIVATO";
+  $("shieldmode").textContent = s.mode === "rl" ? "Rete RL · nessuno scudo (solo mosse illegali escluse)"
+    : s.guarded ? "Laya + scudo" : "Laya · scudo DISATTIVATO";
   $("shield").textContent = String(s.interventions ?? 0).padStart(4, "0");
 
   // Selectors mirror the server (shared game: any spectator can switch it).
-  document.querySelectorAll("#modes button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === s.mode));
+  document.querySelectorAll("#modes button").forEach(b => {
+    b.setAttribute("aria-pressed", b.dataset.mode === s.mode);
+    b.hidden = !!s.modes && !s.modes.includes(b.dataset.mode);
+  });
   const sel = $("model"), names = s.models || [];
   if (sel.dataset.list !== names.join(",")) {
     sel.replaceChildren(...names.map(n => new Option(modelName(n), n)));
     sel.dataset.list = names.join(",");
   }
   if (s.model && document.activeElement !== sel) sel.value = s.model;
-  if (s.model) $("title").textContent = `Laya ${modelName(s.model)}`;
+  if (s.model) $("title").textContent = s.mode === "rl" ? "Rete RL · PPO" : `Laya ${modelName(s.model)}`;
 
   // Read-only view of the exact request body; kept from the last move between frames.
   const req = d.request;
   if (req) {
     $("instate").textContent = typeof req.state === "string" ? req.state : JSON.stringify(req.state, null, 2);
     $("inquestions").textContent = JSON.stringify(req.questions, null, 2);
-    $("inmeta").textContent = `${MODE_IT[d.mode] || d.mode} · ${modelName(d.model)} · ${d.input_tokens ?? 0} token in ingresso`;
+    const rl = d.mode === "rl";
+    $("incap").innerHTML = rl ? "INPUT DELLA RETE RL &nbsp;·&nbsp; ULTIMA MOSSA &nbsp;·&nbsp; UN TENSORE DI NUMERI, NON TESTO"
+      : "INPUT INVIATO A LAYA &nbsp;·&nbsp; ULTIMA MOSSA &nbsp;·&nbsp; TESTO ORIGINALE, NON MODIFICABILE";
+    $("instatecap").textContent = rl ? "TENSORE IN INGRESSO" : "STATO";
+    $("inquestionscap").textContent = rl ? "USCITA DELLA RETE" : "DOMANDE";
+    $("inmeta").textContent = rl ? `RL · ${modelName(d.model)} · 0 token`
+      : `${MODE_IT[d.mode] || d.mode} · ${modelName(d.model)} · ${d.input_tokens ?? 0} token in ingresso`;
   }
 
   const t = Math.floor(s.elapsed ?? 0);

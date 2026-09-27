@@ -8,3 +8,6 @@ venv/
 
 # Local compose overrides
 docker-compose.override.yml
+
+# Local model exports (large)
+models/

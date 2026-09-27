@@ -20,6 +20,8 @@ from pathlib import Path
 from .examples import EXAMPLES
 
 STATIC = Path(__file__).parent / "static"
+# One FAQ for both apps; it lives with the snake (same image, same /app tree).
+FAQ = Path(__file__).parent.parent / "snakeweb" / "static" / "faq.html"
 LAYA_URL = os.environ.get("LAYA_URL", "http://localhost:8001").rstrip("/")
 TIMEOUT = float(os.environ.get("LAYA_TIMEOUT", "60"))
 MAX_BODY = 64 * 1024
@@ -71,6 +73,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/":
             self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
+        elif path in ("/faq", "/faq.html"):
+            self._send(200, FAQ.read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/examples":
             # The catalogue, minus nothing -- the page renders questions client-side.
             self._send(200, json.dumps(EXAMPLES), "application/json")

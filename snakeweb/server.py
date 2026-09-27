@@ -9,6 +9,7 @@ render them, and never drive the game.
 
 import argparse
 import json
+import os
 import queue
 import socket
 import threading
@@ -17,10 +18,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .game import SnakeGame
+from . import rl_policy
 from .policy import PROMPTS, LayaPolicy, LayaUnavailable
 
 STATIC = Path(__file__).parent / "static"
 MAX_CLIENTS = 32
+# Model each mode switches to when picked in the UI (the model dropdown still overrides).
+# Hard mode's board-facts prompt only makes sense for the snake-trap fine-tune.
+MODE_MODELS = json.loads(
+    os.environ.get("SNAKE_MODE_MODELS", '{"easy": "multilingual", "hard": "snake-trap"}')
+)
+# RL mode: in-process PPO net, no Laya call. It decides in milliseconds, so frames are
+# paced to stay watchable (the page's DECISIONI /s shows the paced rate).
+RL_TICK = float(os.environ.get("SNAKE_RL_TICK", "0.03"))
+MODES = list(PROMPTS) + (["rl"] if rl_policy.available() else [])
 
 
 class Broadcaster:
@@ -68,7 +79,7 @@ class Broadcaster:
 
 
 class Runner(threading.Thread):
-    """Plays the game forever, one Laya decision per tick."""
+    """Plays the game forever, one decision per tick (Laya, or the RL net in rl mode)."""
 
     daemon = True
 
@@ -77,7 +88,9 @@ class Runner(threading.Thread):
         self.bus = broadcaster
         self.width, self.height, self.seed = width, height, seed
         self.guarded, self.min_tick = guarded, min_tick
-        self.policy = None
+        self.policy = None  # Laya policy (easy/hard); self.rl is built on first rl pick.
+        self.rl = None
+        self.mode = "easy"
         self.round = 1
         self.best = 0
         self.deaths = 0
@@ -90,11 +103,30 @@ class Runner(threading.Thread):
         self._pending_lock = threading.Lock()
         self.models = []
 
+    @property
+    def active(self):
+        return self.rl if self.mode == "rl" else self.policy
+
+    def model_names(self):
+        names = [m["name"] for m in self.models]
+        return names + [rl_policy.MODEL_NAME] if "rl" in MODES else names
+
     def request_settings(self, mode=None, model=None):
-        if mode is not None and mode not in PROMPTS:
+        names = {m["name"] for m in self.models}
+        if model == rl_policy.MODEL_NAME and "rl" in MODES:
+            mode, model = "rl", None  # The RL net is a mode of its own, not a Laya model.
+        elif model is not None:
+            if model not in names:
+                raise ValueError(f"unknown model {model!r}")
+            with self._pending_lock:
+                target = self._pending.get("mode", self.mode)
+            if mode is None and target == "rl":
+                # Leaving RL through the model dropdown: the mode that model belongs to.
+                mode = next((m for m, n in MODE_MODELS.items() if n == model), "easy")
+        if mode is not None and mode not in MODES:
             raise ValueError(f"unknown mode {mode!r}")
-        if model is not None and model not in {m["name"] for m in self.models}:
-            raise ValueError(f"unknown model {model!r}")
+        if model is None and MODE_MODELS.get(mode) in names:
+            model = MODE_MODELS[mode]
         with self._pending_lock:
             if mode is not None:
                 self._pending["mode"] = mode
@@ -105,7 +137,12 @@ class Runner(threading.Thread):
         with self._pending_lock:
             pending, self._pending = self._pending, {}
         if "mode" in pending:
-            self.policy.mode = pending["mode"]
+            self.mode = pending["mode"]
+            if self.mode == "rl":
+                if self.rl is None:
+                    self.rl = rl_policy.RLPolicy()
+            else:
+                self.policy.mode = self.mode
         model = pending.get("model")
         if model and model != self.policy.client.model:
             self.bus.publish(self._frame(game, None, status="LOADING MODEL"))
@@ -125,16 +162,16 @@ class Runner(threading.Thread):
                 "best": self.best,
                 "deaths": self.deaths,
                 "interventions": self.interventions,
-                "guarded": self.guarded,
+                "guarded": self.guarded and self.mode == "easy",
                 "elapsed": elapsed,
                 "steps_per_second": moves_done / max(0.001, elapsed),
                 "clients": self.bus.client_count,
                 "status": status,
-                "mode": self.policy.mode,
-                "model": self.policy.client.model,
-                "modes": list(PROMPTS),
-                "models": [m["name"] for m in self.models],
-                **self.policy.metadata,
+                "mode": self.mode,
+                "model": rl_policy.MODEL_NAME if self.mode == "rl" else self.policy.client.model,
+                "modes": MODES,
+                "models": self.model_names(),
+                **self.active.metadata,
             },
         }
 
@@ -160,19 +197,22 @@ class Runner(threading.Thread):
                 self._apply_settings(game)
                 tick_start = time.perf_counter()
                 try:
-                    decision = self.policy.decide(game)
+                    decision = self.active.decide(game)
                 except RuntimeError:
-                    # Trapped with the shield on: end the round rather than crash.
+                    # Trapped (shield on, or RL boxed in): end the round rather than crash.
                     game.alive, game.death_reason = False, "trapped"
                     break
                 if decision.intervened:
                     self.interventions += 1
                 game.step(decision.executed)
                 self.moves_total += 1
+                if self.mode == "rl" and game.alive and not game.won and self.rl.starved:
+                    game.alive, game.death_reason = False, "starved"  # Looping, never eating.
                 self.best = max(self.best, game.score)
                 status = "BOARD CLEAR" if game.won else "GAME OVER" if not game.alive else "LIVE"
                 self.bus.publish(self._frame(game, decision, status=status))
-                remaining = self.min_tick - (time.perf_counter() - tick_start)
+                floor = RL_TICK if self.mode == "rl" else self.min_tick
+                remaining = floor - (time.perf_counter() - tick_start)
                 if remaining > 0:
                     time.sleep(remaining)
 
@@ -207,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/":
             self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
+        elif path in ("/faq", "/faq.html"):
+            self._send(200, (STATIC / "faq.html").read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/state":
             payload = json.dumps(self.bus.latest or {}).encode()
             self._send(200, payload, "application/json")
@@ -290,7 +332,7 @@ def main():
     ap.add_argument("--height", type=int, default=16)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--min-tick", type=float, default=0.0, help="Floor on seconds per move")
-    ap.add_argument("--mode", choices=list(PROMPTS), default="easy", help="Starting prompt mode")
+    ap.add_argument("--mode", choices=MODES, default="easy", help="Starting mode")
     ap.add_argument("--no-shield", action="store_true", help="Disable the cycle safety shield")
     args = ap.parse_args()
 

@@ -111,6 +111,10 @@ with torch.
 | `ONNX_REPO`     | `soyelmismo/laya-multilingual-onnx`  | laya-onnx             |
 | `ONNX_FILE`     | `model-fp32.onnx`                    | laya-onnx             |
 | `ORT_THREADS`   | cores − 1                            | laya-onnx             |
+| `SNAKE_MODE_MODELS` | `{"easy": "multilingual", "hard": "snake-trap"}` | snake (model per mode) |
+| `SNAKE_RL_ONNX` | `/models/snake-rl/snake-rl.onnx` | snake (RL mode)       |
+| `SNAKE_RL_THREADS` | `3`                               | snake (RL mode)       |
+| `SNAKE_RL_TICK` | `0.03` s per move                    | snake (RL mode)       |
 
 ## Credits
 

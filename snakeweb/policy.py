@@ -18,6 +18,7 @@ import urllib.request
 from dataclasses import asdict, dataclass
 
 from .game import DIRECTIONS
+from .snake_state import MOVE_QUESTION, board_state
 
 LAYA_URL = os.environ.get("LAYA_URL", "http://localhost:8000")
 LAYA_MODEL = os.environ.get("LAYA_MODEL", "multilingual")
@@ -157,38 +158,14 @@ def easy_prompt(game, moves, safe, preferred):
     return state, questions
 
 
-# PLACEHOLDER until the fine-tune lands: board-only prompt in the same shape as
-# handoff/snake-finetune/gen_snake_dataset.py (ASCII grid, neutral criteria). Replace
-# with the final training prompt so inference matches what the model was tuned on.
-HARD_LEGEND = "Snake board. H head, S body, T tail, F food, . empty. Walls surround the board."
-HARD_QUESTIONS = {
-    "move": {
-        "type": "choice",
-        "instructions": "Read the board and choose the snake's next move.",
-        "criteria": {
-            "UP": "Move the head one cell up.",
-            "DOWN": "Move the head one cell down.",
-            "LEFT": "Move the head one cell left.",
-            "RIGHT": "Move the head one cell right.",
-        },
-    },
-}
-
-
 def hard_prompt(game, moves, safe, preferred):
-    """Model sees only the board; no planner hints."""
-    grid = [["."] * game.width for _ in range(game.height)]
-    for x, y in game.body:
-        grid[y][x] = "S"
-    tx, ty = game.body[-1]
-    grid[ty][tx] = "T"
-    hx, hy = game.body[0]
-    grid[hy][hx] = "H"
-    if game.food:
-        fx, fy = game.food
-        grid[fy][fx] = "F"
-    rows = "\n".join("".join(r) for r in grid)
-    return f"{HARD_LEGEND}\nLength {len(game.body)}.\n{rows}", HARD_QUESTIONS
+    """Model sees only board facts relative to the head; no planner verdicts.
+
+    Exact wording the snake-trap fine-tune was trained on (snake_state.py); other
+    phrasings are out of distribution and play worse.
+    """
+    state = board_state(list(game.body), game.food, game.width, game.height)
+    return state, dict(MOVE_QUESTION)
 
 
 PROMPTS = {"easy": easy_prompt, "hard": hard_prompt}
@@ -221,11 +198,13 @@ class LayaPolicy:
         started = time.perf_counter()
         moves = game.moves()
         safe = [m for m in moves if m.safe]
-        if not safe and self.guarded:
+        mode = self.mode  # Read once: the server thread may flip it mid-decision.
+        # Hard mode is the honest test of the board-reading fine-tune: no shield, it can die.
+        guarded = self.guarded and mode == "easy"
+        if not safe and guarded:
             raise RuntimeError("Cycle safety invariant violated: no safe action")
         preferred = max(safe, key=lambda m: m.advance).direction if safe else "NONE"
         reachable, space = game.food_reachability()
-        mode = self.mode  # Read once: the server thread may flip it mid-decision.
         state, questions = PROMPTS[mode](game, moves, safe, preferred)
         body = self.client.request_body(state, questions)
         inference_start = time.perf_counter()
@@ -248,7 +227,7 @@ class LayaPolicy:
         allowed = [m.direction for m in safe]
         executed = (
             max(allowed, key=probabilities.__getitem__)
-            if self.guarded and proposed not in allowed
+            if guarded and proposed not in allowed
             else proposed
         )
         usage = output.get("usage", {})

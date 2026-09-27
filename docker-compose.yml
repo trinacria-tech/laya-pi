@@ -45,14 +45,16 @@ services:
       - "8001:8001"
     volumes:
       - laya-models:/models
+      # snake-trap fine-tune (board-reading snake; plays the "hard" prompt). Local
+      # export laid out like the HF repo: model-fp32.onnx + rl_agent_config.json + tokenizer/.
+      - ./models/snake-trap-onnx:/finetune/snake-trap-onnx:ro
     environment:
       LAYA_HOST: "0.0.0.0"
       LAYA_PORT: "8001"
       # Selectable models; only ONE is resident at a time (a switch evicts the old one).
-      # Add the snake fine-tune here once exported, e.g. mount its dir and:
-      #   "snake": {"path": "/finetune/laya_snake", "file": "model-fp32.onnx"}
       ONNX_MODELS: >-
-        {"multilingual": {"repo": "soyelmismo/laya-multilingual-onnx", "file": "model-fp32.onnx"}}
+        {"multilingual": {"repo": "soyelmismo/laya-multilingual-onnx", "file": "model-fp32.onnx"},
+         "snake-trap": {"path": "/finetune/snake-trap-onnx", "file": "model-fp32.onnx"}}
       ONNX_DEFAULT: multilingual
       # Snake is the primary compute; laya-serve is idle except on rare API calls,
       # so let ONNX use all 4 cores (measured ~2.2s vs ~2.5s at 3). Brief contention
@@ -79,9 +81,14 @@ services:
     command: ["python", "-m", "snakeweb.server", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8080:8080"
+    volumes:
+      # RL agent (PPO CNN, 5 MB): runs in this container, no Laya call. Mode "rl".
+      - ./models/snake-rl:/models/snake-rl:ro
     environment:
       LAYA_URL: http://laya-onnx:8001
       LAYA_MODEL: multilingual
+      SNAKE_RL_ONNX: /models/snake-rl/snake-rl.onnx
+      SNAKE_RL_TICK: "0.03"   # floor in seconds per RL move (~30 moves/s); 0 = raw speed
     restart: unless-stopped
 
   # API showcase: five example typed decisions (email, moderation, router, triage,

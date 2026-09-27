@@ -67,6 +67,8 @@
   .qbuild label{color:var(--muted);font-size:11px}
   .qbuild .rm{background:transparent;border:none;color:var(--red);cursor:pointer;font:inherit;margin-left:auto}
   .hint{color:var(--muted);font-size:11px;margin:2px 0 6px}
+  .faq-link{margin-left:auto;color:var(--muted);text-decoration:none;border:1px solid var(--dim);border-radius:6px;padding:2px 8px;font-size:11px}
+  .faq-link:hover,.faq-link:focus-visible{color:var(--green);border-color:var(--green);outline:none}
   .modelpick{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:11px;color:var(--muted)}
   .modelpick select{font:inherit;letter-spacing:inherit;color:var(--fg);background:transparent;border:1px solid var(--dim);border-radius:6px;padding:4px 10px;cursor:pointer}
   .modelpick select option{background:var(--bg);color:var(--fg)}
@@ -76,7 +78,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="term-chrome"><i></i><i></i><i></i><span>laya — ~/showcase</span></div>
+    <div class="term-chrome"><i></i><i></i><i></i><span>laya — ~/showcase</span><a class="faq-link" href="/faq">FAQ · COME FUNZIONA</a></div>
     <h1>LAYA · API DECISIONALE</h1>
     <div class="sub">Decisioni tipizzate System-1 in un solo passaggio · <b id="engine">connessione…</b> · zero token in uscita</div>
     <label class="modelpick">MODELLO <select id="model" disabled></select>
