@@ -117,14 +117,14 @@
 
   <h2 id="modelli">4 · Quali modelli si possono scegliere qui?</h2>
   <div class="table"><table>
-    <tr><th></th><th>multilingue</th><th>snake-trap</th><th>rete RL (PPO)</th></tr>
-    <tr><td>Modalità</td><td><b>FACILE</b></td><td><b>DIFFICILE</b></td><td><b>RL</b></td></tr>
-    <tr><td>Che cos'è</td><td>Laya così com'è, senza modifiche</td><td>Laya dopo un fine-tune sul serpente</td><td>Piccola rete convoluzionale, non è Laya</td></tr>
-    <tr><td>Cosa riceve</td><td>Le mosse già etichettate dal pianificatore</td><td>4 righe di testo sul tabellone, viste dalla testa</td><td>Il tabellone come 6 griglie di numeri</td></tr>
-    <tr><td>Chi decide davvero</td><td>Il pianificatore (Laya legge le etichette), più lo scudo</td><td>Il modello, senza aiuti né scudo</td><td>La rete, senza aiuti né scudo</td></tr>
-    <tr><td>Dimensione</td><td>1,29 GB</td><td>1,29 GB</td><td>5 MB</td></tr>
-    <tr><td>Tempo per mossa sul Pi</td><td>~1 s</td><td>~3 s</td><td>~20 ms (la pagina la rallenta a ~30 mosse al secondo)</td></tr>
-    <tr><td>Risultato</td><td>Non muore mai (lo scudo lo impedisce)</td><td>85 punti di media (20 partite); una partita intera sul Pi: 108</td><td>237 di media (20 partite); sul Pi 249 di media su 10 partite</td></tr>
+    <tr><th></th><th>multilingue</th><th>snake-rl-room</th><th>snake-trap</th><th>rete RL (PPO)</th></tr>
+    <tr><td>Modalità</td><td><b>FACILE</b></td><td><b>DIFFICILE</b> (predefinito)</td><td>DIFFICILE (dal menu)</td><td><b>RL</b></td></tr>
+    <tr><td>Che cos'è</td><td>Laya così com'è, senza modifiche</td><td>Laya con fine-tune, insegnante: la rete RL</td><td>Laya con fine-tune, insegnante: regole scritte a mano</td><td>Piccola rete convoluzionale, non è Laya</td></tr>
+    <tr><td>Cosa riceve</td><td>Le mosse già etichettate dal pianificatore</td><td colspan="2">4 righe di testo sul tabellone, viste dalla testa</td><td>Il tabellone come 6 griglie di numeri</td></tr>
+    <tr><td>Chi decide davvero</td><td>Il pianificatore (Laya legge le etichette), più lo scudo</td><td colspan="2">Il modello, senza aiuti né scudo</td><td>La rete, senza aiuti né scudo</td></tr>
+    <tr><td>Dimensione</td><td>1,29 GB</td><td>1,29 GB</td><td>1,29 GB</td><td>5 MB</td></tr>
+    <tr><td>Tempo per mossa sul Pi</td><td>~1 s</td><td>~3 s</td><td>~3 s</td><td>~20 ms (la pagina la rallenta a ~30 mosse al secondo)</td></tr>
+    <tr><td>Risultato</td><td>Non muore mai (lo scudo lo impedisce)</td><td>102 di media (20 partite)</td><td>85 di media (20 partite); una partita intera sul Pi: 108</td><td>237 di media (20 partite); sul Pi 249 di media su 10 partite</td></tr>
   </table></div>
 
   <h2 id="classifica">5 · La classifica: chi gioca meglio?</h2>
@@ -136,14 +136,17 @@
     <tr><td>1</td><td>Ciclo puro</td><td>zig-zag per ogni cella, all'infinito</td><td><b>378</b></td><td>20/20</td><td>94 (metà tabellone dopo ~26.000 mosse)</td></tr>
     <tr><td>3</td><td>Insegnante a regole</td><td>pianificatore scritto a mano (ricerca in ampiezza) che legge il tabellone</td><td>372,8</td><td>3/20 (16 bloccati, 1 morto)</td><td>non misurato</td></tr>
     <tr><td>4</td><td>Rete RL (ppo1)</td><td>rete neurale da 5 MB addestrata per tentativi ed errori (PPO), 3 ore</td><td>236,8</td><td>0/20</td><td><b>~25</b></td></tr>
-    <tr><td>5</td><td>Laya snake-trap + scudo anti-trappola</td><td>modello linguistico da 322M con fine-tune, scarta le mosse che giudica trappole</td><td>90,8</td><td>0</td><td>—</td></tr>
-    <tr><td>6</td><td>Laya snake-trap</td><td>lo stesso modello, gioca la sua scelta</td><td>85,2</td><td>0</td><td>—</td></tr>
-    <tr><td>7</td><td>Laya snake-room</td><td>fine-tune precedente, senza addestramento sulle trappole</td><td>60,9</td><td>0</td><td>—</td></tr>
-    <tr><td>8</td><td>Laya snake (tabellone ASCII)</td><td>primo fine-tune, legge la griglia di caratteri</td><td>12,8</td><td>0</td><td>—</td></tr>
-    <tr><td>9</td><td>Laya zero-shot</td><td>modello di serie, nessun addestramento</td><td>0</td><td>0</td><td>muore in ~10 mosse</td></tr>
+    <tr><td>5</td><td>Laya snake-rl-room + scudo anti-trappola</td><td>fine-tune con la rete RL come insegnante, scarta le mosse che giudica mortali</td><td>122,7</td><td>0</td><td>—</td></tr>
+    <tr><td>6</td><td>Laya snake-rl-room</td><td>lo stesso modello, gioca la sua scelta (mediana 110, massimo 147)</td><td>102,2</td><td>0</td><td>—</td></tr>
+    <tr><td>7</td><td>Laya snake-trap + scudo anti-trappola</td><td>fine-tune con l'insegnante a regole, scarta le mosse che giudica trappole</td><td>90,8</td><td>0</td><td>—</td></tr>
+    <tr><td>8</td><td>Laya snake-trap</td><td>lo stesso modello, gioca la sua scelta</td><td>85,2</td><td>0</td><td>—</td></tr>
+    <tr><td>9</td><td>Laya snake-room</td><td>fine-tune precedente, senza addestramento sulle trappole</td><td>60,9</td><td>0</td><td>—</td></tr>
+    <tr><td>10</td><td>Laya snake (tabellone ASCII)</td><td>primo fine-tune, legge la griglia di caratteri</td><td>12,8</td><td>0</td><td>—</td></tr>
+    <tr><td>11</td><td>Laya zero-shot</td><td>modello di serie, nessun addestramento</td><td>0</td><td>0</td><td>muore in ~10 mosse</td></tr>
     <tr><td>–</td><td>Winnow-12B visione (zero-shot)</td><td>guardava immagini del tabellone</td><td colspan="3">peggio di mosse a caso</td></tr>
   </table></div>
-  <p class="note">In arrivo: Laya riaddestrato con la rete RL come insegnante, in quattro formati di input (vedi <a href="#insegnante">sezione 10</a>).</p>
+  <p class="note">Il miglior Laya è ora <b>snake-rl-room</b>, addestrato dalla rete RL: +20% rispetto a snake-trap, +35% con lo scudo anti-trappola.
+     Perché conta l'insegnante: <a href="#insegnante">sezione 10</a>.</p>
 
   <h2 id="hamilton">6 · Il ciclo hamiltoniano, e perché non "vince" la vetrina</h2>
   <p>Un <b>ciclo hamiltoniano</b> è un percorso chiuso che passa <b>una e una sola volta per ogni cella</b> del tabellone e torna al punto di partenza.
@@ -185,16 +188,19 @@ Food: 3 rows up, 4 columns left. Length 6.</pre>
   <p>Un <b>fine-tune</b> riprende un modello già addestrato e continua ad allenarlo su esempi di un compito specifico. Qui gli esempi
      sono posizioni di gioco con la mossa giusta, date dall'insegnante a regole: 55.134 esempi, 4 passate sui dati, circa 87 minuti su GPU,
      partendo da <code>laya-multilingual</code>. Il risultato si chiama <code>snake-trap</code>.</p>
+  <p>Il secondo, <code>snake-rl-room</code>, legge <b>lo stesso identico testo</b>: è cambiato solo l'insegnante, ora la rete RL
+     (75.114 esempi, circa 2 ore). È quello che gioca in modalità DIFFICILE; <code>snake-trap</code> resta selezionabile dal menu per confronto.</p>
   <h3>Perché Laya fa fatica</h3>
   <p>Laya legge testo. Se gli dai il tabellone come griglia di caratteri ASCII deve <b>contare le colonne</b> per capire cosa c'è vicino
      alla testa, ed è proprio il suo punto debole: <b>12,8 punti</b>. Con i fatti descritti rispetto alla testa ("Up: open for 5, then wall;
      room 181") arriva a <b>85–91</b>. Il formato dell'input conta quanto il modello.</p>
   <h3>Cos'è lo "scudo anti-trappola"?</h3>
   <p>A Laya si chiede anche, per ogni direzione, "questa mossa è una trappola?", e gioca la mossa migliore tra quelle che non considera
-     trappole. È il modello che <b>controlla sé stesso</b>, non una regola scritta a mano: porta la media da 85 a 91. Non è attivo nella
-     demo dal vivo: sono cinque domande invece di una, circa 5 volte il lavoro per ogni mossa.</p>
+     trappole. È il modello che <b>controlla sé stesso</b>, non una regola scritta a mano: porta snake-trap da 85 a 91 e
+     snake-rl-room da 102 a <b>123</b>. Non è attivo nella demo dal vivo: sono cinque domande invece di una, e sul Pi una mossa
+     passa da ~2,6 s a ~12,4 s.</p>
   <h3>Com'è andata sul Pi</h3>
-  <p>Senza scudo e senza pianificatore, in una partita intera: <b>108 punti</b> (lunghezza 114, 2273 mosse, circa 2 ore a ~3 s per mossa).</p>
+  <p>snake-trap, senza scudo e senza pianificatore, in una partita intera: <b>108 punti</b> (lunghezza 114, 2273 mosse, circa 2 ore a ~3 s per mossa).</p>
   <p class="note">Il testo va costruito esattamente come in addestramento (<code>snakeweb/snake_state.py</code>):
      anche parole diverse con lo stesso significato fanno giocare peggio il modello.</p>
 
@@ -232,22 +238,24 @@ Food: 3 rows up, 4 columns left. Length 6.</pre>
      La rete RL dà <b>preferenze morbide</b> tra le mosse e un vero segnale di "morirò presto": dopo ogni mossa possibile si
      rigiocano le sue partite per 100 mosse. La sua stima di valore prevede la morte entro 60 mosse molto meglio del vecchio controllo:
      <b>AUC 0,78 contro 0,61</b> (1 = perfetto, 0,5 = a caso). Il vecchio controllo riconosceva solo il <b>24%</b> delle posizioni già condannate.</p>
-  <p>La domanda: Laya gioca meglio con un insegnante migliore? E il limite era il formato dell'input o le etichette?
-     Per scoprirlo si provano quattro formati:</p>
-  <ul>
-    <li><b>room</b>: i fatti rispetto alla testa usati oggi;</li>
-    <li><b>grid</b>: il tabellone ASCII grezzo;</li>
-    <li><b>order</b>: tabellone ASCII in cui i pezzi del corpo mostrano fra quante mosse si liberano (cifre 1–9);</li>
-    <li><b>tail</b>: i fatti rispetto alla testa più la lunghezza del percorso fino alla coda. È un suggerimento da pianificatore,
-        quindi viene riportato a parte.</li>
-  </ul>
+  <p>Le domande erano due: Laya gioca meglio con un insegnante migliore? E il limite era il formato dell'input o le etichette?</p>
+  <h3>Il risultato</h3>
+  <p>Stesso testo di snake-trap, insegnante diverso: <b>102,2</b> punti di media invece di 85,2 (+20%), e <b>122,7</b> con lo scudo
+     anti-trappola invece di 90,8 (+35%). Lo scudo ora guadagna +20 punti invece di +6: le etichette "morirò presto" della rete RL
+     sono molto più utili del vecchio "la coda è raggiungibile". Sulle posizioni di prova il modello sceglie una mossa mortale
+     solo nello 0,1% dei casi, e coincide con la mossa migliore della rete RL nell'88%.
+     Quindi: <b>con un insegnante migliore, Laya gioca meglio</b>.</p>
+  <p>Per il formato si è provato anche il tabellone ASCII grezzo (<i>grid</i>) con lo stesso insegnante: ha reso meno ed è stato scartato.
+     Contare le colonne resta il punto debole di Laya, quindi il formato conta. La versione finale è <b>snake-rl-room</b>:
+     i fatti rispetto alla testa, insegnati dalla rete RL.</p>
 
   <h2 id="velocita">11 · Quanto è veloce ciascuno sul Pi?</h2>
   <div class="table"><table>
     <tr><th>giocatore</th><th>come gira</th><th>tempo per mossa</th></tr>
     <tr><td>Rete RL</td><td>ONNX dentro il programma del serpente, 5 MB</td><td><b>~18 ms</b> sul Pi (1,3 ms su un PC desktop)</td></tr>
     <tr><td>Laya FACILE</td><td>modello ONNX da 1,29 GB dietro un server, ~30 token</td><td>~1 s</td></tr>
-    <tr><td>Laya DIFFICILE</td><td>stesso server, ~166 token</td><td>~3 s (con lo scudo anti-trappola ~5 volte il lavoro)</td></tr>
+    <tr><td>Laya DIFFICILE</td><td>stesso server, ~166 token</td><td>~2,6 s</td></tr>
+    <tr><td>Laya DIFFICILE + scudo anti-trappola</td><td>5 domande, ~790 token</td><td>~12,4 s (misurato, non attivo nella demo)</td></tr>
   </table></div>
   <p>Per Laya il tempo cresce con la lunghezza del testo, circa 40 ms per token: per questo le modalità con più testo sono più lente.</p>
 

@@ -8,7 +8,9 @@ can still trap itself. It is the teacher for the next Laya snake fine-tune.
 Adapted from the snake-trap handoff (jev-clones projects/snake-finetune/rl, run ppo1).
 
 Env:
-  SNAKE_RL_ONNX     path to the .onnx      (/models/snake-rl/snake-rl.onnx)
+  SNAKE_RL_ONNX     local .onnx, used if present (/models/snake-rl/snake-rl.onnx)
+  SNAKE_RL_REPO     HF repo to download it from otherwise (trinacratech/snake-rl-ppo;
+                    empty = local only). Cached under HF_HOME like the Laya models.
   SNAKE_RL_THREADS  intra-op threads       (3; Pi 4 p50 46/26/18/15 ms at 1/2/3/4 threads,
                     but 4 fights laya-onnx for cores and doubles the p95)
 Board must be 24x16 (the net's input size).
@@ -25,6 +27,7 @@ from .game import DIRECTIONS
 from .policy import Decision
 
 ONNX_PATH = os.environ.get("SNAKE_RL_ONNX", "/models/snake-rl/snake-rl.onnx")
+REPO = os.environ.get("SNAKE_RL_REPO", "trinacratech/snake-rl-ppo")
 MODEL_NAME = "snake-rl"
 CHANNELS = (
     "occupato (1 = corpo)",
@@ -36,8 +39,19 @@ CHANNELS = (
 )
 
 
-def available(path=ONNX_PATH):
-    return os.path.isfile(path)
+def resolve():
+    """Path to the net: the local file, else a (cached) Hub download; None if neither works."""
+    if os.path.isfile(ONNX_PATH):
+        return ONNX_PATH
+    if not REPO:
+        return None
+    try:
+        from huggingface_hub import hf_hub_download
+
+        return hf_hub_download(REPO, "snake-rl.onnx")
+    except Exception as error:  # Offline with an empty cache: run without RL mode.
+        print(f"RL net unavailable ({REPO}): {error}")
+        return None
 
 
 def observe(body, food, hunger, width, height):
@@ -61,7 +75,7 @@ def observe(body, food, hunger, width, height):
 class RLPolicy:
     mode = "rl"
 
-    def __init__(self, path=ONNX_PATH):
+    def __init__(self, path):
         import onnxruntime as ort  # Only the RL mode needs it in this process.
 
         opts = ort.SessionOptions()

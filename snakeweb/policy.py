@@ -161,7 +161,7 @@ def easy_prompt(game, moves, safe, preferred):
 def hard_prompt(game, moves, safe, preferred):
     """Model sees only board facts relative to the head; no planner verdicts.
 
-    Exact wording the snake-trap fine-tune was trained on (snake_state.py); other
+    Exact wording the snake fine-tunes (snake-trap, snake-rl-room) were trained on (snake_state.py); other
     phrasings are out of distribution and play worse.
     """
     state = board_state(list(game.body), game.food, game.width, game.height)

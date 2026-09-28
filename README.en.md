@@ -10,7 +10,7 @@ The stack ships as one Docker image with four roles:
 | Service      | Port   | What it does                                                                 |
 |--------------|--------|------------------------------------------------------------------------------|
 | `laya-onnx`  | `8001` | `/v1/systemone` API backed by ONNX Runtime (fp32), ~1.3–1.65× faster than torch |
-| `snake`      | `8080` | An autonomous Snake where every move is a live Laya decision, streamed to browsers over SSE |
+| `snake`      | `8080` | Autonomous Snake in three modes (easy Laya, hard Laya, RL net), streamed to browsers over SSE; FAQ at `/faq` |
 | `showcase`   | `8091` | Web playground with five example decisions (email routing, moderation, router, triage, multilingual) |
 | `laya`       | `8000` | Stock `laya-serve` on torch CPU (optional, `torch` profile)                  |
 
@@ -34,6 +34,18 @@ To also run the torch-based `laya-serve`:
 ```sh
 docker compose --profile torch up -d laya
 ```
+
+## Snake models
+
+| Mode | Model | Input |
+|------|-------|-------|
+| EASY | [`soyelmismo/laya-multilingual-onnx`](https://huggingface.co/soyelmismo/laya-multilingual-onnx) | moves pre-labelled by the planner (Hamiltonian cycle), with shield |
+| HARD | [`trinacratech/snake-rl-room-onnx`](https://huggingface.co/trinacratech/snake-rl-room-onnx) | head-relative board facts, no shield; Laya fine-tuned with the RL net as teacher |
+| HARD (dropdown) | [`trinacratech/snake-trap-onnx`](https://huggingface.co/trinacratech/snake-trap-onnx) | same input; earlier fine-tune, rule-based teacher |
+| RL | [`trinacratech/snake-rl-ppo`](https://huggingface.co/trinacratech/snake-rl-ppo) | the board as 6 grids; 5 MB PPO net, runs inside the snake container |
+
+Models download on first use into the `laya-models` volume. Scores and explanations are on the FAQ
+page (`http://<pi-address>:8080/faq`, Italian).
 
 ## Calling the API
 
@@ -111,8 +123,9 @@ with torch.
 | `ONNX_REPO`     | `soyelmismo/laya-multilingual-onnx`  | laya-onnx             |
 | `ONNX_FILE`     | `model-fp32.onnx`                    | laya-onnx             |
 | `ORT_THREADS`   | cores − 1                            | laya-onnx             |
-| `SNAKE_MODE_MODELS` | `{"easy": "multilingual", "hard": "snake-trap"}` | snake (model per mode) |
-| `SNAKE_RL_ONNX` | `/models/snake-rl/snake-rl.onnx` | snake (RL mode)       |
+| `SNAKE_MODE_MODELS` | `{"easy": "multilingual", "hard": "snake-rl-room"}` | snake (model per mode) |
+| `SNAKE_RL_ONNX` | `/models/snake-rl/snake-rl.onnx` | snake (RL mode): local file, if present |
+| `SNAKE_RL_REPO` | `trinacratech/snake-rl-ppo`      | snake (RL mode): otherwise downloaded from here |
 | `SNAKE_RL_THREADS` | `3`                               | snake (RL mode)       |
 | `SNAKE_RL_TICK` | `0.03` s per move                    | snake (RL mode)       |
 

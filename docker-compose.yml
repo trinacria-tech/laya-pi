@@ -45,16 +45,18 @@ services:
       - "8001:8001"
     volumes:
       - laya-models:/models
-      # snake-trap fine-tune (board-reading snake; plays the "hard" prompt). Local
-      # export laid out like the HF repo: model-fp32.onnx + rl_agent_config.json + tokenizer/.
-      - ./models/snake-trap-onnx:/finetune/snake-trap-onnx:ro
     environment:
       LAYA_HOST: "0.0.0.0"
       LAYA_PORT: "8001"
       # Selectable models; only ONE is resident at a time (a switch evicts the old one).
+      # Snake fine-tunes (board-reading; play the "hard" prompt), downloaded on first pick:
+      #   snake-rl-room  RL-agent teacher (hard mode's default)
+      #   snake-trap     rule-planner teacher, same input text (for comparison)
+      # A local export works too: mount it and use {"path": "/dir", "file": ...} instead of "repo".
       ONNX_MODELS: >-
         {"multilingual": {"repo": "soyelmismo/laya-multilingual-onnx", "file": "model-fp32.onnx"},
-         "snake-trap": {"path": "/finetune/snake-trap-onnx", "file": "model-fp32.onnx"}}
+         "snake-rl-room": {"repo": "trinacratech/snake-rl-room-onnx", "file": "model-fp32.onnx"},
+         "snake-trap": {"repo": "trinacratech/snake-trap-onnx", "file": "model-fp32.onnx"}}
       ONNX_DEFAULT: multilingual
       # Snake is the primary compute; laya-serve is idle except on rare API calls,
       # so let ONNX use all 4 cores (measured ~2.2s vs ~2.5s at 3). Brief contention
@@ -82,12 +84,14 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # RL agent (PPO CNN, 5 MB): runs in this container, no Laya call. Mode "rl".
-      - ./models/snake-rl:/models/snake-rl:ro
+      # Shared HF cache: the RL net (PPO CNN, 5 MB, mode "rl", runs in this container)
+      # is downloaded from trinacratech/snake-rl-ppo once and reused offline.
+      - laya-models:/models
     environment:
       LAYA_URL: http://laya-onnx:8001
       LAYA_MODEL: multilingual
-      SNAKE_RL_ONNX: /models/snake-rl/snake-rl.onnx
+      HF_HOME: /models
+      HF_HUB_DISABLE_TELEMETRY: "1"
       SNAKE_RL_TICK: "0.03"   # floor in seconds per RL move (~30 moves/s); 0 = raw speed
     restart: unless-stopped
 

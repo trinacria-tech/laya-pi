@@ -24,14 +24,15 @@ from .policy import PROMPTS, LayaPolicy, LayaUnavailable
 STATIC = Path(__file__).parent / "static"
 MAX_CLIENTS = 32
 # Model each mode switches to when picked in the UI (the model dropdown still overrides).
-# Hard mode's board-facts prompt only makes sense for the snake-trap fine-tune.
+# Hard mode's board-facts prompt only makes sense for the snake fine-tunes (snake-rl-room, snake-trap).
 MODE_MODELS = json.loads(
-    os.environ.get("SNAKE_MODE_MODELS", '{"easy": "multilingual", "hard": "snake-trap"}')
+    os.environ.get("SNAKE_MODE_MODELS", '{"easy": "multilingual", "hard": "snake-rl-room"}')
 )
 # RL mode: in-process PPO net, no Laya call. It decides in milliseconds, so frames are
 # paced to stay watchable (the page's DECISIONI /s shows the paced rate).
 RL_TICK = float(os.environ.get("SNAKE_RL_TICK", "0.03"))
-MODES = list(PROMPTS) + (["rl"] if rl_policy.available() else [])
+MODES = list(PROMPTS)  # main() appends "rl" once the RL net is found or downloaded.
+RL_PATH = None
 
 
 class Broadcaster:
@@ -140,7 +141,7 @@ class Runner(threading.Thread):
             self.mode = pending["mode"]
             if self.mode == "rl":
                 if self.rl is None:
-                    self.rl = rl_policy.RLPolicy()
+                    self.rl = rl_policy.RLPolicy(RL_PATH)
             else:
                 self.policy.mode = self.mode
         model = pending.get("model")
@@ -332,9 +333,17 @@ def main():
     ap.add_argument("--height", type=int, default=16)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--min-tick", type=float, default=0.0, help="Floor on seconds per move")
-    ap.add_argument("--mode", choices=MODES, default="easy", help="Starting mode")
+    ap.add_argument("--mode", choices=list(PROMPTS) + ["rl"], default="easy", help="Starting mode")
     ap.add_argument("--no-shield", action="store_true", help="Disable the cycle safety shield")
     args = ap.parse_args()
+
+    global RL_PATH
+    RL_PATH = rl_policy.resolve()
+    if RL_PATH:
+        MODES.append("rl")
+    elif args.mode == "rl":
+        print("RL net unavailable; starting in easy mode")
+        args.mode = "easy"
 
     bus = Broadcaster()
     runner = Runner(

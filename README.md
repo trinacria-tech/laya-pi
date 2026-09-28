@@ -11,7 +11,7 @@ Lo stack è un'unica immagine Docker con quattro ruoli:
 | Servizio     | Porta  | Cosa fa                                                                        |
 |--------------|--------|--------------------------------------------------------------------------------|
 | `laya-onnx`  | `8001` | API `/v1/systemone` su ONNX Runtime (fp32), ~1,3–1,65× più veloce di torch     |
-| `snake`      | `8080` | Snake autonomo: ogni mossa è una decisione Laya dal vivo, trasmessa ai browser via SSE |
+| `snake`      | `8080` | Snake autonomo in tre modalità (Laya facile, Laya difficile, rete RL), trasmesso ai browser via SSE; FAQ su `/faq` |
 | `showcase`   | `8091` | Vetrina web con cinque decisioni di esempio (smistamento email, moderazione, router, triage, multilingue) |
 | `laya`       | `8000` | `laya-serve` standard su torch CPU (opzionale, profilo `torch`)                |
 
@@ -35,6 +35,18 @@ Per avviare anche `laya-serve` basato su torch:
 ```sh
 docker compose --profile torch up -d laya
 ```
+
+## Modelli dello Snake
+
+| Modalità  | Modello | Cosa riceve |
+|-----------|---------|-------------|
+| FACILE    | [`soyelmismo/laya-multilingual-onnx`](https://huggingface.co/soyelmismo/laya-multilingual-onnx) | mosse etichettate dal pianificatore (ciclo hamiltoniano), con scudo |
+| DIFFICILE | [`trinacratech/snake-rl-room-onnx`](https://huggingface.co/trinacratech/snake-rl-room-onnx) | fatti sul tabellone rispetto alla testa, senza scudo; fine-tune di Laya con la rete RL come insegnante |
+| DIFFICILE (menu) | [`trinacratech/snake-trap-onnx`](https://huggingface.co/trinacratech/snake-trap-onnx) | stesso input; fine-tune precedente, insegnante a regole |
+| RL        | [`trinacratech/snake-rl-ppo`](https://huggingface.co/trinacratech/snake-rl-ppo) | il tabellone come 6 griglie; rete PPO da 5 MB, gira dentro il container dello snake |
+
+I modelli vengono scaricati al primo utilizzo nel volume `laya-models`. Punteggi e spiegazioni
+nella pagina FAQ (`http://<indirizzo-pi>:8080/faq`).
 
 ## Chiamare l'API
 
@@ -111,8 +123,9 @@ Latenza tipica sul Pi: ~2,2 s per decisione con ONNX (4 thread), ~4,2 s con torc
 | `ONNX_REPO`     | `soyelmismo/laya-multilingual-onnx`  | laya-onnx             |
 | `ONNX_FILE`     | `model-fp32.onnx`                    | laya-onnx             |
 | `ORT_THREADS`   | core − 1                             | laya-onnx             |
-| `SNAKE_MODE_MODELS` | `{"easy": "multilingual", "hard": "snake-trap"}` | snake (modello per modalità) |
-| `SNAKE_RL_ONNX` | `/models/snake-rl/snake-rl.onnx` | snake (modalità RL)   |
+| `SNAKE_MODE_MODELS` | `{"easy": "multilingual", "hard": "snake-rl-room"}` | snake (modello per modalità) |
+| `SNAKE_RL_ONNX` | `/models/snake-rl/snake-rl.onnx` | snake (modalità RL): file locale, se presente |
+| `SNAKE_RL_REPO` | `trinacratech/snake-rl-ppo`      | snake (modalità RL): altrimenti scaricato da qui |
 | `SNAKE_RL_THREADS` | `3`                               | snake (modalità RL)   |
 | `SNAKE_RL_TICK` | `0.03` s per mossa                   | snake (modalità RL)   |
 
