@@ -27,27 +27,55 @@
     color: var(--fg);
     font: 14px/1.5 "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
     letter-spacing: .06em;
-    padding: 24px;
   }
-  .wrap { max-width: 1180px; margin: 0 auto; }
-  header {
-    display: flex; justify-content: space-between; align-items: baseline;
-    color: var(--muted); border-bottom: 1px solid var(--dim); padding-bottom: 10px;
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
+
+  /* Above the fold: board + logo + moves, sized to one viewport for the big screen. */
+  .fold {
+    --pad: 24px;
+    height: 100vh; height: 100dvh; padding: var(--pad);
+    display: grid; grid-template-columns: minmax(0,1fr) clamp(260px, 25vw, 720px); gap: var(--pad);
   }
-  .term-chrome { display: flex; align-items: center; gap: 8px; }
-  .term-chrome i { width: 11px; height: 11px; border-radius: 50%; background: #2c3a4b; display: block; }
-  .term-chrome i:nth-child(1) { background: #ff5f57; }
-  .term-chrome i:nth-child(2) { background: #febc2e; }
-  .term-chrome i:nth-child(3) { background: #28c840; }
-  .term-chrome span { margin-left: 6px; letter-spacing: .04em; }
+  /* Board column: title above, controls bar below; the canvas takes whatever height is left. */
+  .fold .stage { min-width: 0; min-height: 0; display: flex; justify-content: center; align-items: center; }
+  .boardcol {
+    --ar: 1.5; --t: clamp(22px, 2.2vw, 44px); --b: clamp(11px, .85vw, 17px); --g: clamp(12px, 1.2vw, 24px);
+    width: min(100%, calc((100dvh - 2 * var(--pad) - 1.2 * var(--t) - 2.6 * var(--b) - 2 * var(--g)) * var(--ar)));
+    display: flex; flex-direction: column; gap: var(--g);
+  }
+  .boardcol h1 { font-family: "Play", sans-serif; font-weight: 700; font-size: var(--t); line-height: 1.2; letter-spacing: .5em; margin: 0; }
+  .boardcol canvas { width: 100%; }
+  .ctlbar { font-size: var(--b); display: flex; flex-wrap: wrap; align-items: center; gap: .6em 1.6em; }
+  .ctlbar .ctl { display: flex; align-items: center; gap: .8em; }
+  .ctlbar label { color: var(--muted); }
+  .ctlbar .seg button, .ctlbar select {
+    font: inherit; letter-spacing: inherit; color: var(--muted); background: transparent;
+    border: 1px solid var(--dim); padding: .35em .8em; cursor: pointer;
+  }
+  .ctlbar select { border-radius: 6px; }
+  .ctlbar select option { background: var(--bg); color: var(--fg); }
+  .ctlbar .faq-link { font-size: inherit; margin: 0 0 0 auto; padding: .35em .8em; }
+  .side { min-height: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }
+  .side .logo { display: block; width: 100%; min-height: 0; max-height: 72dvh; object-fit: contain; object-position: top center; }
+  .side .moves h2 { font-size: clamp(14px, 1.3vw, 26px); margin-bottom: 4px; }
+  .moves .len { color: var(--muted); font-size: clamp(11px, .9vw, 18px); margin-bottom: 1.2em; font-variant-numeric: tabular-nums; }
+  .moves .len b { color: var(--fg); font-family: "Play", sans-serif; font-size: 1.6em; letter-spacing: .04em; }
+  .moves .cap { margin-top: 0; font-size: clamp(10px, .75vw, 15px); }
+  .moves .prob { grid-template-columns: 7.5em 1fr 3em; margin: .35em 0; font-size: clamp(12px, 1.05vw, 22px); }
+  .moves .prob .bar { height: 5px; border-radius: 3px; }
+  .moves .rows { margin-top: .8em; font-size: clamp(12px, 1.05vw, 22px); }
+  @media (max-width: 900px) {
+    .fold { height: auto; grid-template-columns: 1fr; }
+    .boardcol { width: 100%; }
+    .side .logo { max-height: 180px; object-position: center; }
+  }
+
+  .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; margin-top: 26px; }
   #status.live { color: var(--green); }
   #status.over { color: var(--red); }
   #status.clear { color: var(--cyan); }
-  main { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 40px; margin-top: 26px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  h1 { font-family: "Play", sans-serif; font-size: 20px; letter-spacing: .5em; font-weight: 700; margin: 0 0 18px; }
-  canvas { width: 100%; height: auto; border: 1px solid var(--dim); border-radius: 12px; image-rendering: pixelated; }
-  .scores { display: flex; gap: 42px; margin-top: 22px; }
+  canvas { display: block; height: auto; border: 1px solid var(--dim); border-radius: 12px; }
+  .scores { display: flex; flex-wrap: wrap; gap: 42px; }
   .score-label { color: var(--muted); font-size: 11px; }
   .score-value { font-family: "Play", sans-serif; font-weight: 700; font-size: 40px; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .fill { color: var(--muted); font-size: 11px; margin-top: 14px; }
@@ -77,10 +105,8 @@
          font-size: 11px; line-height: 1.55; letter-spacing: .02em; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
   .tip p { margin: 8px 0; }
   .shieldrows:has(.help:hover, .help:focus-visible) .tip, .tip.open { display: block; }
-  .controls { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-items: center; margin-bottom: 22px; font-size: 11px; }
-  .controls label { color: var(--muted); }
   .seg { display: flex; gap: 0; }
-  .seg button, .controls select {
+  .seg button {
     font: inherit; letter-spacing: inherit; color: var(--muted); background: transparent;
     border: 1px solid var(--dim); padding: 4px 10px; cursor: pointer;
   }
@@ -91,8 +117,6 @@
   .faq-link { color: var(--muted); text-decoration: none; border: 1px solid var(--dim); border-radius: 6px; padding: 2px 8px; margin-right: 14px; font-size: 11px; }
   .faq-link:hover, .faq-link:focus-visible { color: var(--green); border-color: var(--green); outline: none; }
   .seg button[aria-pressed="true"] { color: var(--bg); background: var(--green); border-color: var(--green); }
-  .controls select { border-radius: 6px; width: 100%; }
-  .controls select option { background: var(--bg); color: var(--fg); }
   .input { margin-top: 30px; border-top: 1px solid var(--dim); padding-top: 14px; }
   .input .cap { margin-top: 0; display: flex; justify-content: space-between; }
   .input-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 20px; }
@@ -105,16 +129,43 @@
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <span class="term-chrome"><i></i><i></i><i></i><span>LAYA&nbsp; /&nbsp; INTELLIGENZA LOCALE</span></span>
-    <span><a class="faq-link" href="/faq">FAQ · COME FUNZIONA</a><span id="status" class="live">CONNESSIONE</span></span>
-  </header>
-
-  <main>
-    <section>
+<main class="fold">
+  <div class="stage">
+    <div class="boardcol" id="boardcol">
       <h1>S N A K E</h1>
-      <canvas id="board" width="480" height="320"></canvas>
+      <canvas id="board" width="960" height="640" aria-label="Tabellone di Snake"></canvas>
+      <div class="ctlbar">
+        <div class="ctl"><label>MODALITÀ</label>
+          <div class="seg" id="modes">
+            <button type="button" data-mode="easy" aria-pressed="false">FACILE</button>
+            <button type="button" data-mode="hard" aria-pressed="false">DIFFICILE</button>
+            <button type="button" data-mode="rl" aria-pressed="false" hidden>RL</button>
+          </div>
+        </div>
+        <div class="ctl"><label for="model">MODELLO</label><select id="model"></select></div>
+        <a class="faq-link" href="/faq">FAQ · COME FUNZIONA</a>
+        <span id="status" class="live">CONNESSIONE</span>
+      </div>
+    </div>
+  </div>
+  <aside class="side">
+    <img class="logo" src="logo.svg" alt="TrinacriaTech · Root the Island. Secure the Future.">
+    <div class="panel moves">
+      <h2 id="title">Laya multilingue</h2>
+      <div class="len"><b id="foldlen">000</b> &nbsp;LUNGHEZZA &nbsp;·&nbsp; <span id="foldpct">0.0%</span></div>
+      <div class="cap">PROSSIMA MOSSA</div>
+      <div id="probs"></div>
+      <div class="rows">
+        <div class="row"><span>IN ESECUZIONE</span><span id="exec" style="color:var(--green)">—</span></div>
+        <div class="row"><span>INFERENZA</span><span id="foldinf">— ms</span></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="wrap">
+  <div class="details" style="margin-top:0">
+    <section>
       <div class="scores">
         <div><div class="score-label">PUNTEGGIO</div><div class="score-value" id="score" style="color:var(--green)">000</div></div>
         <div><div class="score-label">LUNGHEZZA</div><div class="score-value" id="length">000</div></div>
@@ -125,26 +176,7 @@
     </section>
 
     <section class="panel">
-      <h2 id="title">Laya multilingue</h2>
       <div class="sub" id="hw">caricamento…</div>
-
-      <div class="controls">
-        <label>MODALITÀ</label>
-        <div class="seg" id="modes">
-          <button type="button" data-mode="easy" aria-pressed="false">FACILE</button>
-          <button type="button" data-mode="hard" aria-pressed="false">DIFFICILE</button>
-          <button type="button" data-mode="rl" aria-pressed="false" hidden>RL</button>
-        </div>
-        <label for="model">MODELLO</label>
-        <select id="model"></select>
-      </div>
-
-      <div class="cap">PROSSIMA MOSSA &nbsp;·&nbsp; PROBABILITÀ DEL MODELLO</div>
-      <div id="probs"></div>
-
-      <div class="rows">
-        <div class="row"><span>IN ESECUZIONE</span><span id="exec" style="color:var(--green)">—</span></div>
-      </div>
 
       <div class="cap">RISCHIO VICOLO CIECO</div>
       <div class="track"><i id="riskbar" style="background:var(--amber)"></i></div>
@@ -153,8 +185,10 @@
       <div class="cap">CIBO RAGGIUNGIBILE</div>
       <div class="track"><i id="foodbar" style="background:var(--cyan)"></i></div>
       <div class="row"><span></span><span id="food" style="color:var(--cyan)">0.00</span></div>
+    </section>
 
-      <div class="rows">
+    <section class="panel">
+      <div class="rows" style="margin-top:0">
         <div class="row"><span>INFERENZA</span><span id="inf">— ms</span></div>
         <div class="row"><span>DECISIONI</span><span id="dps">— /s</span></div>
         <div class="row"><span>TOKEN IN USCITA</span><span id="tok">0</span></div>
@@ -174,7 +208,7 @@
         </div>
       </div>
     </section>
-  </main>
+  </div>
 
   <section class="input" aria-label="Input inviato al modello">
     <div class="cap"><span id="incap">INPUT INVIATO A LAYA &nbsp;·&nbsp; ULTIMA MOSSA &nbsp;·&nbsp; TESTO ORIGINALE, NON MODIFICABILE</span><span id="inmeta">—</span></div>
@@ -206,7 +240,7 @@ const MODEL_IT = { multilingual: "multilingue", "snake-rl": "rete RL (PPO)" };
 const modelName = m => MODEL_IT[m] || m;
 const $ = id => document.getElementById(id);
 const canvas = $("board"), ctx = canvas.getContext("2d");
-const CELL = 20;
+const CELL = 40;  // drawn large so the board stays sharp when scaled up on a projector
 
 // Build the probability rows once, then only mutate their values per frame.
 const rows = {};
@@ -223,14 +257,17 @@ const pad3 = n => String(n).padStart(3, "0");
 
 function drawBoard(g) {
   const w = g.width * CELL, h = g.height * CELL;
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w; canvas.height = h;
+    $("boardcol").style.setProperty("--ar", g.width / g.height);  // CSS fits the board to the viewport height
+  }
   ctx.fillStyle = "#0b1418";
   ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = "#13272e";
   for (let y = 0; y < g.height; y++)
     for (let x = 0; x < g.width; x++)
-      ctx.fillRect(x * CELL + CELL / 2 - 1, y * CELL + CELL / 2 - 1, 2, 2);
+      ctx.fillRect(x * CELL + CELL / 2 - 2, y * CELL + CELL / 2 - 2, 4, 4);
 
   // Tail fades toward the body colour, matching the terminal build.
   g.body.slice().reverse().forEach((cell, i) => {
@@ -238,13 +275,13 @@ function drawBoard(g) {
     const f = 1 - index / Math.max(1, g.body.length);
     ctx.fillStyle = index === 0 ? "#dcfff0"
       : `rgb(${Math.round(18 + 64 * f)},${Math.round(73 + 150 * f)},${Math.round(57 + 102 * f)})`;
-    ctx.fillRect(cell[0] * CELL, cell[1] * CELL, CELL - 1, CELL - 1);
+    ctx.fillRect(cell[0] * CELL, cell[1] * CELL, CELL - 2, CELL - 2);
   });
 
   if (g.food) {
     ctx.fillStyle = "#00f0ff";
     ctx.beginPath();
-    ctx.arc(g.food[0] * CELL + CELL / 2, g.food[1] * CELL + CELL / 2, CELL / 2 - 3, 0, 7);
+    ctx.arc(g.food[0] * CELL + CELL / 2, g.food[1] * CELL + CELL / 2, CELL / 2 - 6, 0, 7);
     ctx.fill();
   }
 }
@@ -258,7 +295,8 @@ function render(frame) {
   $("best").textContent = pad3(s.best ?? g.score);
   const pct = 100 * g.length / (g.width * g.height);
   $("fill").style.width = pct + "%";
-  $("fillpct").textContent = pct.toFixed(1) + "%";
+  $("fillpct").textContent = $("foldpct").textContent = pct.toFixed(1) + "%";
+  $("foldlen").textContent = pad3(g.length);
 
   const probs = d.probabilities || {};
   for (const dir of DIRS) {
@@ -277,7 +315,7 @@ function render(frame) {
   $("foodbar").style.width = (reach * 100) + "%";
   $("food").textContent = reach.toFixed(2);
 
-  $("inf").textContent = (d.inference_ms ?? 0).toFixed(0) + " ms";
+  $("inf").textContent = $("foldinf").textContent = (d.inference_ms ?? 0).toFixed(0) + " ms";
   $("dps").textContent = (s.steps_per_second ?? 0).toFixed(2) + " /s";
   $("tok").textContent = d.output_tokens ?? 0;
   $("engine").textContent = s.engine || "—";
