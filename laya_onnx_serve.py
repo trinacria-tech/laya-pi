@@ -13,8 +13,11 @@ a different model (or POST /v1/models/load) drops the current session before the
 next one is built, so RAM never holds two (8GB Pi, no swap).
 
 Config via env:
-  ONNX_MODELS  JSON registry {name: {"repo" | "path": ..., "file": ...}}; "repo" is an
-               HF repo, "path" a local dir (rl_agent_config.json + tokenizer/ + onnx).
+  ONNX_MODELS  JSON registry {name: {"repo" | "path": ..., "file": ..., "backend": ...}};
+               "repo" is an HF repo, "path" a local dir. backend:
+                 laya      (default) Laya ONNX export: rl_agent_config.json + tokenizer/ + onnx
+                 llamacpp  a GGUF decision model run by a llama-server child process
+                           ($LLAMA_SERVER); optional "args": extra llama-server flags
                Defaults to {ONNX_NAME: {"repo": ONNX_REPO, "file": ONNX_FILE}}.
   ONNX_NAME    name of the default model    (multilingual)
   ONNX_REPO    HF repo with the export      (soyelmismo/laya-multilingual-onnx)
@@ -41,22 +44,30 @@ def registry():
     for name, spec in models.items():
         if not isinstance(spec, dict) or ("repo" in spec) == ("path" in spec):
             raise ValueError(f"ONNX_MODELS[{name!r}] needs exactly one of 'repo' or 'path'")
-        spec.setdefault("file", "model-fp32.onnx")
+        spec.setdefault("backend", "laya")
+        spec.setdefault("file", "model-fp32.onnx" if spec["backend"] == "laya" else None)
+        if spec["backend"] not in BACKENDS or not spec["file"]:
+            raise ValueError(f"ONNX_MODELS[{name!r}]: backend must be one of {sorted(BACKENDS)}, with a file")
     return models
 
 
-def load_agent(spec):
+def fetch(spec):
+    """(source, model file path): a "path" dir as is, a "repo" via the HF cache."""
+    if "path" in spec:
+        return spec["path"], os.path.join(spec["path"], spec["file"])
+    from huggingface_hub import hf_hub_download
+
+    return spec["repo"], hf_hub_download(spec["repo"], spec["file"])
+
+
+def ort_threads():
+    return int(os.environ.get("ORT_THREADS") or max(1, (os.cpu_count() or 2) - 1))
+
+
+def load_laya(spec):
     from laya.onnx_agent import ONNXAgent
 
-    if "path" in spec:
-        source = spec["path"]
-        onnx_path = os.path.join(source, spec["file"])
-    else:
-        from huggingface_hub import hf_hub_download
-
-        source = spec["repo"]
-        onnx_path = hf_hub_download(source, spec["file"])
-
+    source, onnx_path = fetch(spec)
     agent = ONNXAgent(source, onnx_path=onnx_path)
 
     # ONNXAgent builds its InferenceSession with no SessionOptions, so intra-op
@@ -67,9 +78,8 @@ def load_agent(spec):
     #   branches, so parallel-op mode only adds scheduling overhead here).
     import onnxruntime as ort
 
-    threads = int(os.environ.get("ORT_THREADS") or max(1, (os.cpu_count() or 2) - 1))
     so = ort.SessionOptions()
-    so.intra_op_num_threads = threads
+    so.intra_op_num_threads = ort_threads()
     so.inter_op_num_threads = 1
     so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -77,6 +87,87 @@ def load_agent(spec):
         onnx_path, sess_options=so, providers=["CPUExecutionProvider"]
     )
     return agent
+
+
+class LlamaCppAgent:
+    """One llama-server child process holding a GGUF decision model (llama.cpp ships
+    /v1/systemone for d1-omni, Julia-1, Laya, ...); predict() forwards to it."""
+
+    def __init__(self, gguf, args=()):
+        import socket
+        import subprocess
+
+        with socket.socket() as s:  # Free loopback port for the child.
+            s.bind(("127.0.0.1", 0))
+            self.port = s.getsockname()[1]
+        # -b/-ub: a question is read in one batch, so they must hold the whole prompt.
+        cmd = [os.environ.get("LLAMA_SERVER", "llama-server"), "-m", gguf,
+               "--host", "127.0.0.1", "--port", str(self.port), "-t", str(ort_threads()),
+               "-np", "1", "-c", "8192", "-b", "8192", "-ub", "8192", *args]
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        deadline = time.monotonic() + 300
+        while True:
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"llama-server exited with {self.proc.returncode}")
+            try:
+                if self._call("GET", "/health", None, timeout=2).get("status") == "ok":
+                    break
+            except Exception:
+                pass
+            if time.monotonic() > deadline:
+                self.close()
+                raise RuntimeError("llama-server did not become ready")
+            time.sleep(0.5)
+
+    def _call(self, method, path, body, timeout=600):
+        import urllib.error
+        import urllib.request
+
+        data = None if body is None else json.dumps(body).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", data=data, method=method,
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as e:
+            if e.code in (400, 422):  # Bad questions: surface as a 422 like the ONNX agents.
+                raise ValueError(e.read().decode(errors="replace")) from None
+            raise
+
+    def predict(self, state, questions):
+        out = self._call("POST", "/v1/systemone", {"state": state, "questions": questions})
+        return {"answers": out["answers"], "usage": out.get("usage", {})}
+
+    def close(self):
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(10)
+            except Exception:
+                self.proc.kill()
+
+
+def load_llamacpp(spec):
+    _, gguf = fetch(spec)
+    return LlamaCppAgent(gguf, spec.get("args", ()))
+
+
+BACKENDS = {"laya": load_laya, "llamacpp": load_llamacpp}
+
+
+def load_agent(spec):
+    return BACKENDS[spec["backend"]](spec)
+
+
+def release_heap():
+    # glibc keeps a dropped session's freed heap mapped (~2.7GB after the fp32 encoder);
+    # hand it back to the OS so the next, smaller model actually has that RAM.
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
 
 
 class SingleResident:
@@ -96,9 +187,12 @@ class SingleResident:
             if name == self.name:
                 return
             # Free the resident session first: two fp32 encoders don't fit alongside
-            # the rest of the stack.
+            # the rest of the stack. A llama.cpp child has to be stopped explicitly.
+            if hasattr(self.agent, "close"):
+                self.agent.close()
             self.name = self.agent = None
             gc.collect()
+            release_heap()
             started = time.perf_counter()
             self.agent = load_agent(self.models[name])
             self.name, self.load_s = name, time.perf_counter() - started
@@ -115,7 +209,8 @@ class SingleResident:
             "loaded": self.name,
             "load_seconds": round(self.load_s, 2),
             "models": [
-                {"name": n, "source": s.get("repo") or s.get("path"), "file": s["file"]}
+                {"name": n, "source": s.get("repo") or s.get("path"), "file": s["file"],
+                 "backend": s["backend"]}
                 for n, s in self.models.items()
             ],
         }
@@ -133,7 +228,9 @@ def build_app():
     @app.get("/health")
     def health():
         spec = models[resident.name] if resident.name else {}
-        return {"status": "ok", "backend": "onnx", "model": resident.name,
+        # "backend" names this service (clients key on "onnx"); "engine" is what runs
+        # the resident model (laya ONNX export or llama.cpp GGUF).
+        return {"status": "ok", "backend": "onnx", "engine": spec.get("backend"), "model": resident.name,
                 "repo": spec.get("repo") or spec.get("path"), "file": spec.get("file")}
 
     @app.get("/v1/models")

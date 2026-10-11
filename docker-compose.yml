@@ -52,11 +52,16 @@ services:
       # Snake fine-tunes (board-reading; play the "hard" prompt), downloaded on first pick:
       #   snake-rl-room  RL-agent teacher (hard mode's default)
       #   snake-trap     rule-planner teacher, same input text (for comparison)
+      # Other decision models, run as GGUF Q8_0 by llama.cpp's llama-server (same API):
+      #   d1-omni        LiquidAI d1-omni-600M (LFM Open License v1.0), text only here
+      #   julia-1        Supersonic Labs Julia-1, 144M (Apache-2.0)
       # A local export works too: mount it and use {"path": "/dir", "file": ...} instead of "repo".
       ONNX_MODELS: >-
         {"multilingual": {"repo": "soyelmismo/laya-multilingual-onnx", "file": "model-fp32.onnx"},
          "snake-rl-room": {"repo": "trinacratech/snake-rl-room-onnx", "file": "model-fp32.onnx"},
-         "snake-trap": {"repo": "trinacratech/snake-trap-onnx", "file": "model-fp32.onnx"}}
+         "snake-trap": {"repo": "trinacratech/snake-trap-onnx", "file": "model-fp32.onnx"},
+         "d1-omni": {"backend": "llamacpp", "repo": "LiquidAI/d1-omni-600M-GGUF", "file": "d1-omni-600M-Q8_0.gguf"},
+         "julia-1": {"backend": "llamacpp", "repo": "ggml-org/Julia-1-GGUF", "file": "Julia-1-Q8_0.gguf"}}
       ONNX_DEFAULT: multilingual
       # Snake is the primary compute; laya-serve is idle except on rare API calls,
       # so let ONNX use all 4 cores (measured ~2.2s vs ~2.5s at 3). Brief contention

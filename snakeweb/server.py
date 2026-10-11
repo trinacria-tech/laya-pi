@@ -23,6 +23,8 @@ from .policy import PROMPTS, LayaPolicy, LayaUnavailable
 
 STATIC = Path(__file__).parent / "static"
 MAX_CLIENTS = 32
+# Engine label per registry backend (laya-onnx /v1/models reports each model's backend).
+ENGINES = {"laya": "ONNX Runtime · fp32", "llamacpp": "llama.cpp · GGUF Q8_0"}
 # Model each mode switches to when picked in the UI (the model dropdown still overrides).
 # Hard mode's board-facts prompt only makes sense for the snake fine-tunes (snake-rl-room, snake-trap).
 MODE_MODELS = json.loads(
@@ -173,8 +175,15 @@ class Runner(threading.Thread):
                 "modes": MODES,
                 "models": self.model_names(),
                 **self.active.metadata,
+                **({} if self.mode == "rl" else self._engine()),
             },
         }
+
+    def _engine(self):
+        # The startup label describes whichever model was resident then; a GGUF model
+        # picked later runs on llama.cpp inside the same service.
+        spec = next((m for m in self.models if m["name"] == self.policy.client.model), {})
+        return {"engine": ENGINES[spec["backend"]]} if spec.get("backend") in ENGINES else {}
 
     def run(self):
         self.moves_total = 0

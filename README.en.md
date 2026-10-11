@@ -47,6 +47,25 @@ docker compose --profile torch up -d laya
 Models download on first use into the `laya-models` volume. Scores and explanations are on the FAQ
 page (`http://<pi-address>:8080/faq`, Italian).
 
+## Other decision models
+
+Besides Laya, the `laya-onnx` service offers two more decision models on the same
+`/v1/systemone` API, run as GGUF Q8_0 by [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
+`llama-server` (built into the image). Pick them from the snake's and the showcase's model
+dropdown; only one model is ever resident.
+
+| Name | Model | License | Snake move | Email (3 questions) | RAM |
+|------|-------|---------|------------|---------------------|-----|
+| `multilingual` | Laya multilingual, ONNX fp32 | Apache-2.0 | ~1 s | ~5 s | ~2.6 GB |
+| `d1-omni` | [`LiquidAI/d1-omni-600M-GGUF`](https://huggingface.co/LiquidAI/d1-omni-600M-GGUF) | LFM Open License v1.0 | ~3.5 s | ~17 s | ~0.85 GB |
+| `julia-1` | [`ggml-org/Julia-1-GGUF`](https://huggingface.co/ggml-org/Julia-1-GGUF) ([Supersonic Labs](https://huggingface.co/SupersonicLabs/Julia-1)) | Apache-2.0 | ~0.5 s | ~2 s | ~0.7 GB |
+
+Measured on a Raspberry Pi 4, 4 threads; RAM is the whole `laya-onnx` service. d1-omni is the most accurate in our checks (12/12
+labelled moves, sensible showcase answers) but ~3x slower than Laya; lower quants don't help (the
+Cortex-A72 is compute-bound: Q4_0 3.8 s, Q5_K_M 4.8 s; ONNX q8/q4 6.3/4.8 s). Julia-1 is the
+fastest but less reliable: 8/12 moves, and it flags a legitimate refund email as spam/phishing
+(0.8), in BF16 too. Only d1-omni's text path is used here (no images/audio).
+
 ## Calling the API
 
 ```sh
@@ -73,7 +92,7 @@ single forward pass — no generated tokens.
 ## Repository layout
 
 ```
-Dockerfile            one image for every service (CPU torch + laya[serve] + onnxruntime)
+Dockerfile            one image for every service (CPU torch + laya[serve] + onnxruntime + llama-server)
 docker-compose.yml    service wiring, ports, thread budgets, healthchecks
 laya_onnx_serve.py    laya-serve-compatible server on ONNX Runtime
 laya_capped.py        laya-serve with language auto-routing but one resident checkpoint
@@ -134,6 +153,7 @@ with torch.
 - [Laya](https://github.com/NandhaKishorM/laya) by Convai Innovations — the model and `laya` package.
 - [laya-mlx](https://github.com/mizorewww/laya-mlx) — Snake rules and decision policy, ported here from MLX to CPU torch/ONNX (see `snakeweb/NOTICE`).
 - [soyelmismo/laya-multilingual-onnx](https://huggingface.co/soyelmismo/laya-multilingual-onnx) — community ONNX export.
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) — `llama-server`, for the GGUF models (Liquid AI's d1-omni, Supersonic Labs' Julia-1).
 - Fonts: [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) and [Play](https://fonts.google.com/specimen/Play), both under the SIL Open Font License 1.1 (see `LICENSES/`).
 
 ## License

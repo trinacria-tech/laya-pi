@@ -48,6 +48,25 @@ docker compose --profile torch up -d laya
 I modelli vengono scaricati al primo utilizzo nel volume `laya-models`. Punteggi e spiegazioni
 nella pagina FAQ (`http://<indirizzo-pi>:8080/faq`).
 
+## Altri modelli decisionali
+
+Oltre a Laya, il servizio `laya-onnx` offre due modelli decisionali con la stessa API
+`/v1/systemone`, eseguiti in GGUF Q8_0 da `llama-server` di [llama.cpp](https://github.com/ggml-org/llama.cpp)
+(compilato nell'immagine). Si scelgono dal menu modello dello snake e della vetrina; resta
+sempre un solo modello in memoria.
+
+| Nome | Modello | Licenza | Mossa snake | Email (3 domande) | RAM |
+|------|---------|---------|-------------|-------------------|-----|
+| `multilingual` | Laya multilingue, ONNX fp32 | Apache-2.0 | ~1 s | ~5 s | ~2,6 GB |
+| `d1-omni` | [`LiquidAI/d1-omni-600M-GGUF`](https://huggingface.co/LiquidAI/d1-omni-600M-GGUF) | LFM Open License v1.0 | ~3,5 s | ~17 s | ~0,85 GB |
+| `julia-1` | [`ggml-org/Julia-1-GGUF`](https://huggingface.co/ggml-org/Julia-1-GGUF) ([Supersonic Labs](https://huggingface.co/SupersonicLabs/Julia-1)) | Apache-2.0 | ~0,5 s | ~2 s | ~0,7 GB |
+
+Misurato su Raspberry Pi 4, 4 thread; RAM = intero servizio `laya-onnx`. d1-omni è il più accurato sulle nostre prove (mosse
+etichettate 12/12, vetrina sensata) ma ~3 volte più lento di Laya; le quantizzazioni più basse non
+aiutano (sul Cortex-A72 il limite è il calcolo: Q4_0 3,8 s, Q5_K_M 4,8 s; ONNX q8/q4 6,3/4,8 s).
+Julia-1 è il più veloce ma meno affidabile: 8/12 mosse e segnala come spam/phishing (0,8) un'email
+di rimborso legittima, anche in BF16. Qui si usa solo il testo di d1-omni (niente immagini/audio).
+
 ## Chiamare l'API
 
 ```sh
@@ -74,7 +93,7 @@ passaggio in avanti del modello — nessun token generato.
 ## Struttura del repository
 
 ```
-Dockerfile            un'immagine per tutti i servizi (torch CPU + laya[serve] + onnxruntime)
+Dockerfile            un'immagine per tutti i servizi (torch CPU + laya[serve] + onnxruntime + llama-server)
 docker-compose.yml    collegamento dei servizi, porte, thread, healthcheck
 laya_onnx_serve.py    server compatibile con laya-serve su ONNX Runtime
 laya_capped.py        laya-serve con instradamento per lingua ma un solo checkpoint in memoria
@@ -134,6 +153,7 @@ Latenza tipica sul Pi: ~2,2 s per decisione con ONNX (4 thread), ~4,2 s con torc
 - [Laya](https://github.com/NandhaKishorM/laya) di Convai Innovations — il modello e il pacchetto `laya`.
 - [laya-mlx](https://github.com/mizorewww/laya-mlx) — regole di Snake e policy decisionale, portate qui da MLX a torch/ONNX su CPU (vedi `snakeweb/NOTICE`).
 - [soyelmismo/laya-multilingual-onnx](https://huggingface.co/soyelmismo/laya-multilingual-onnx) — export ONNX della community.
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) — `llama-server`, per i modelli GGUF (d1-omni di Liquid AI, Julia-1 di Supersonic Labs).
 - Font: [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) e [Play](https://fonts.google.com/specimen/Play), entrambi con licenza SIL Open Font License 1.1 (vedi `LICENSES/`).
 
 ## Licenza
